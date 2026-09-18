@@ -1,6 +1,6 @@
 # Browser Chat Provider Electron App
 
-This package now runs as an Electron app that opens ChatGPT and loads the existing Browser Chat Provider bridge as an unpacked Chromium extension.
+This package now runs as a native Electron app. Phase 1 connects directly to Browser Chat Provider from the Electron main process and no longer loads the Chromium extension runtime.
 
 ## Run
 
@@ -18,7 +18,7 @@ cd ..\browser-chat-bridge
 npm run dev
 ```
 
-Use the `Browser Chat` > `Show Bridge Popup` menu item to open the bridge popup. You can also use:
+Use the `Browser Chat` > `Show Bridge Popup` menu item to open the native bridge popup. You can also use:
 
 ```text
 Ctrl+Shift+B
@@ -64,8 +64,8 @@ ws://127.0.0.1:20128/browser-bridge
 
 ## Notes
 
-- The Electron app reuses the current extension code by loading `manifest.json` with `session.loadExtension()`.
-- `BROWSER_CHAT_WS_URL` is written into `electron/runtime-config.json` before the extension starts.
-- The `Browser Chat` menu opens the extension popup for status, agent registration, and debugging.
+- Phase 1 uses `electron/native-bridge.cjs` instead of `session.loadExtension()`.
+- `BROWSER_CHAT_WS_URL` is written into `electron/runtime-config.json` before the native bridge connects.
+- The `Browser Chat` menu opens the native popup for status, agent registration, and debugging.
 - Build output is still generated into `dist/content-script.js` and `dist/network-interceptor.js`.
-- This is the first Electron migration step; later phases can replace Chrome extension APIs with native Electron IPC.
+- Phase 1 supports native bridge connection and agent registration. Phase 2 will route `chat.send` into the ChatGPT window via preload/IPC.

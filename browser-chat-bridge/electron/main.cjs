@@ -4,7 +4,8 @@
 
 const path = require("node:path");
 const fs = require("node:fs");
-const { app, BrowserWindow, Menu, session, shell } = require("electron");
+const { app, BrowserWindow, Menu, ipcMain, shell } = require("electron");
+const { DEFAULT_WS_URL, NativeBridge } = require("./native-bridge.cjs");
 
 const APP_ROOT = path.resolve(__dirname, "..");
 const DEFAULT_CHAT_URL = "https://chatgpt.com/";
@@ -13,7 +14,7 @@ const RUNTIME_CONFIG_PATH = path.join(__dirname, "runtime-config.json");
 
 let mainWindow = null;
 let bridgePopupWindow = null;
-let bridgeExtension = null;
+let nativeBridge = null;
 
 function loadDotEnv() {
   if (!fs.existsSync(DOTENV_PATH)) {
@@ -73,7 +74,7 @@ function getWebSocketUrl() {
     return `ws://127.0.0.1:${args[wsPortIndex + 1]}/browser-bridge`;
   }
 
-  return process.env.BROWSER_CHAT_WS_URL || process.env.BROWSER_CHAT_WS_UR || null;
+  return process.env.BROWSER_CHAT_WS_URL || process.env.BROWSER_CHAT_WS_UR || DEFAULT_WS_URL;
 }
 
 function writeRuntimeConfig() {
@@ -137,26 +138,10 @@ function createMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-function getBridgePopupUrl() {
-  if (!bridgeExtension?.id) {
-    return null;
-  }
-
-  return `chrome-extension://${bridgeExtension.id}/src/popup/popup.html`;
-}
-
 function showBridgePopup() {
-  const popupUrl = getBridgePopupUrl();
-
-  if (!popupUrl) {
-    console.warn("Bridge popup requested before extension is loaded");
-    return;
-  }
-
   if (bridgePopupWindow && !bridgePopupWindow.isDestroyed()) {
     bridgePopupWindow.show();
     bridgePopupWindow.focus();
-    bridgePopupWindow.reload();
     return;
   }
 
@@ -168,9 +153,10 @@ function showBridgePopup() {
     title: "Browser Chat Bridge",
     parent: mainWindow || undefined,
     webPreferences: {
+      preload: path.join(__dirname, "native-popup-preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false,
       webSecurity: true
     }
   });
@@ -179,26 +165,7 @@ function showBridgePopup() {
     bridgePopupWindow = null;
   });
 
-  bridgePopupWindow.loadURL(popupUrl);
-}
-
-async function loadBridgeExtension() {
-  const extensionApi =
-    session.defaultSession.extensions ||
-    session.defaultSession;
-
-  const loadedExtensions = extensionApi.getAllExtensions();
-  const existing = loadedExtensions.find(
-    extension => extension.name === "Browser Chat Provider Bridge"
-  );
-
-  if (existing) {
-    return existing;
-  }
-
-  return extensionApi.loadExtension(APP_ROOT, {
-    allowFileAccess: true
-  });
+  bridgePopupWindow.loadFile(path.join(__dirname, "native-popup.html"));
 }
 
 function createWindow() {
@@ -238,15 +205,21 @@ async function main() {
   writeRuntimeConfig();
   createMenu();
 
-  try {
-    const extension = await loadBridgeExtension();
-    bridgeExtension = extension;
-    console.log(
-      `Loaded Browser Chat Provider Bridge extension: ${extension.name}`
-    );
-  } catch (error) {
-    console.error("Failed to load Browser Chat Provider Bridge extension:", error);
-  }
+  nativeBridge = new NativeBridge({
+    wsUrl: getWebSocketUrl()
+  });
+
+  nativeBridge.on("status", status => {
+    if (bridgePopupWindow && !bridgePopupWindow.isDestroyed()) {
+      bridgePopupWindow.webContents.send("native-bridge:status", status);
+    }
+  });
+
+  nativeBridge.on("error", error => {
+    console.error("[NativeBridge]", error);
+  });
+
+  nativeBridge.connect();
 
   await createWindow();
 
@@ -257,8 +230,22 @@ async function main() {
   });
 }
 
+ipcMain.handle("native-bridge:get-status", () => nativeBridge?.getStatus());
+
+ipcMain.handle("native-bridge:register-agent", (_event, { agentId }) => {
+  const title = mainWindow?.webContents.getTitle() || null;
+  return nativeBridge?.registerAgent({ agentId, title });
+});
+
+ipcMain.handle("native-bridge:unregister-agent", (_event, { agentId }) => {
+  nativeBridge?.unregisterAgent(agentId);
+  return { ok: true };
+});
+
 
 app.on("window-all-closed", () => {
+  nativeBridge?.disconnect();
+
   if (process.platform !== "darwin") {
     app.quit();
   }

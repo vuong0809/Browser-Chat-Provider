@@ -504,6 +504,9 @@ async function announceAllAgents() {
         agentRegistry.list();
 
 
+    const refreshed = [];
+
+
     for (const agent of agents) {
 
         /*
@@ -530,9 +533,15 @@ async function announceAllAgents() {
 
         if (!tabExists) {
 
-            await agentRegistry.setStatus(
+            const offlineAgent =
+                await agentRegistry.setStatus(
                 agent.agentId,
                 AGENT_STATUS.OFFLINE
+            );
+
+
+            refreshed.push(
+                offlineAgent
             );
 
             continue;
@@ -546,6 +555,11 @@ async function announceAllAgents() {
                     AGENT_STATUS.IDLE
                 )
                 : agent;
+
+
+        refreshed.push(
+            announcedAgent
+        );
 
 
         /*
@@ -580,6 +594,9 @@ async function announceAllAgents() {
             })
         );
     }
+
+
+    return refreshed;
 }
 
 
@@ -989,7 +1006,7 @@ async function handleRuntimeMessage(
         }
 
         case INTERNAL_MESSAGE.GET_AGENTS:
-            return handleGetAgents();
+            return await handleGetAgents();
         // --------------------------------------------------------
         // Popup: register agent
         // --------------------------------------------------------
@@ -1215,7 +1232,19 @@ async function handleRuntimeMessage(
             );
     }
 }
-function handleGetAgents() {
+async function handleGetAgents() {
+
+    if (
+        bridgeStatus ===
+        BRIDGE_STATUS.READY
+    ) {
+        const agents =
+            await announceAllAgents();
+
+        return {
+            agents
+        };
+    }
 
     return {
         agents:

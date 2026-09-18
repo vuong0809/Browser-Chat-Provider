@@ -2,14 +2,14 @@
   "name": "browser-chat-provider-bridge",
   "version": "0.1.0",
   "private": true,
-  "description": "Electron bridge between Browser Chat Provider and browser-based AI chat sessions.",
+  "description": "Native Electron bridge between Browser Chat Provider and browser-based AI chat sessions.",
   "main": "electron/main.cjs",
   "scripts": {
     "build": "npm run build:content && npm run build:network",
     "build:content": "esbuild src/content/content-script.js --bundle --format=iife --platform=browser --target=chrome120 --outfile=dist/content-script.js",
     "build:network": "esbuild src/providers/chatgpt/network-interceptor.js --bundle --format=iife --platform=browser --target=chrome120 --outfile=dist/network-interceptor.js",
-    "electron": "npm run build && electron .",
-    "dev": "npm run build && electron .",
+    "electron": "electron .",
+    "dev": "electron .",
     "watch": "esbuild src/content/content-script.js src/providers/chatgpt/network-interceptor.js --bundle --format=iife --platform=browser --target=chrome120 --outdir=dist --watch",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "rebuild": "npm run clean && npm run build"
