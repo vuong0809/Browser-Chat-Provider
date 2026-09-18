@@ -66,17 +66,17 @@ const logger =
 interface RuntimeRequest {
 
     record:
-        BrowserChatRequest;
+    BrowserChatRequest;
 
     deferred:
-        Deferred<
-            BrowserChatAskResult
-        >;
+    Deferred<
+        BrowserChatAskResult
+    >;
 
     timer:
-        ReturnType<
-            typeof setTimeout
-        > | null;
+    ReturnType<
+        typeof setTimeout
+    > | null;
 
     /*
      * Accumulated streamed content.
@@ -86,13 +86,13 @@ interface RuntimeRequest {
      */
 
     streamedContent:
-        string;
+    string;
 
     lastSeq:
-        number;
+    number;
 
     bridgeId:
-        string | null;
+    string | null;
 }
 
 
@@ -128,10 +128,10 @@ export interface AskOptions {
 export interface RequestManagerOptions {
 
     agentRegistry:
-        AgentRegistry;
+    AgentRegistry;
 
     bridgeManager:
-        BridgeManager;
+    BridgeManager;
 
     onStatusChange?: (
         request:
@@ -205,7 +205,7 @@ export class RequestManager {
 
     private readonly onStatusChange?:
         RequestManagerOptions[
-            "onStatusChange"
+        "onStatusChange"
         ];
 
 
@@ -321,6 +321,148 @@ export class RequestManager {
         const stream =
             options.stream ??
             true;
+
+
+        /*
+         * Recover a stale agent lock before acquiring it.
+         *
+         * AgentRegistry owns the lock state while RequestManager owns
+         * the actual runtime requests. If activeRequestId points to a
+         * request that no longer exists here, the lock is stale.
+         *
+         * This can happen after:
+         * - bridge reconnect
+         * - Electron restart
+         * - abnormal request termination
+         * - a previous lifecycle race
+         *
+         * Never clear the lock when the referenced request is still
+         * active in this.requests.
+         */
+
+        if (agent.activeRequestId) {
+
+            const activeRuntime =
+                this.requests.get(
+                    agent.activeRequestId
+                );
+
+
+            if (!activeRuntime) {
+
+                logger.warn(
+                    "Recovering stale agent lock",
+                    {
+                        agentId:
+                            normalizedAgentId,
+
+                        staleRequestId:
+                            agent.activeRequestId,
+
+                        agentStatus:
+                            agent.status
+                    }
+                );
+
+
+                try {
+
+                    this.agentRegistry.release(
+                        normalizedAgentId,
+                        agent.activeRequestId,
+                        AGENT_STATUS.IDLE
+                    );
+
+                } catch (error) {
+
+                    logger.warn(
+                        "Unable to recover stale agent lock",
+                        {
+                            agentId:
+                                normalizedAgentId,
+
+                            staleRequestId:
+                                agent.activeRequestId,
+
+                            error:
+                                getErrorMessage(
+                                    error
+                                )
+                        }
+                    );
+
+
+                    throw normalizeManagerError(
+                        error,
+                        requestId,
+                        normalizedAgentId
+                    );
+                }
+
+            } else if (
+                !isTerminalStatus(
+                    activeRuntime.record.status
+                )
+            ) {
+
+                /*
+                 * This is a real active request.
+                 * Keep the one-request-per-agent guarantee.
+                 */
+
+                throw new BrowserChatRequestError(
+                    ERROR_CODE.AGENT_BUSY,
+                    `Agent "${normalizedAgentId}" is busy`,
+                    {
+                        requestId,
+                        agentId:
+                            normalizedAgentId
+                    }
+                );
+
+            } else {
+
+                /*
+                 * Defensive recovery.
+                 *
+                 * Normally terminal requests are removed from
+                 * this.requests immediately. If one is still present,
+                 * its agent lock must not block future requests.
+                 */
+
+                logger.warn(
+                    "Recovering terminal agent lock",
+                    {
+                        agentId:
+                            normalizedAgentId,
+
+                        staleRequestId:
+                            agent.activeRequestId,
+
+                        requestStatus:
+                            activeRuntime.record.status
+                    }
+                );
+
+
+                try {
+
+                    this.agentRegistry.release(
+                        normalizedAgentId,
+                        agent.activeRequestId,
+                        AGENT_STATUS.IDLE
+                    );
+
+                } catch (error) {
+
+                    throw normalizeManagerError(
+                        error,
+                        requestId,
+                        normalizedAgentId
+                    );
+                }
+            }
+        }
 
 
         /*
@@ -499,14 +641,14 @@ export class RequestManager {
 
 
             switch (
-                event.method
+            event.method
             ) {
 
                 case METHOD.CHAT_DELTA:
 
                     await this.handleDelta(
                         event.payload as
-                            ChatDeltaPayload
+                        ChatDeltaPayload
                     );
 
                     return true;
@@ -516,7 +658,7 @@ export class RequestManager {
 
                     await this.handleChatError(
                         event.payload as
-                            ChatErrorPayload
+                        ChatErrorPayload
                     );
 
                     return true;
@@ -726,7 +868,7 @@ export class RequestManager {
             (
                 runtime as RuntimeRequest & {
                     onDelta?:
-                        AskOptions["onDelta"];
+                    AskOptions["onDelta"];
                 }
             ).onDelta;
 
@@ -924,7 +1066,7 @@ export class RequestManager {
             runtime,
             new BrowserChatRequestError(
                 payload.code ??
-                    ERROR_CODE.INTERNAL_ERROR,
+                ERROR_CODE.INTERNAL_ERROR,
 
                 payload.message,
 
@@ -1559,7 +1701,7 @@ export class RequestManager {
         agentId: string,
         status:
             typeof AGENT_STATUS[
-                keyof typeof AGENT_STATUS
+            keyof typeof AGENT_STATUS
             ],
         requestId?:
             string | null
@@ -1579,7 +1721,7 @@ export class RequestManager {
         if (
             !runtime ||
             runtime.record.agentId !==
-                agentId
+            agentId
         ) {
 
             return;
@@ -1695,9 +1837,9 @@ export class RequestManager {
             !runtime.record.startedAt &&
             (
                 status ===
-                    REQUEST_STATUS.SENDING ||
+                REQUEST_STATUS.SENDING ||
                 status ===
-                    REQUEST_STATUS.GENERATING
+                REQUEST_STATUS.GENERATING
             )
         ) {
 
@@ -1763,7 +1905,7 @@ export class RequestManager {
             RuntimeRequest,
         terminalStatus:
             typeof AGENT_STATUS[
-                keyof typeof AGENT_STATUS
+            keyof typeof AGENT_STATUS
             ]
     ): void {
 
@@ -1851,13 +1993,13 @@ function isTerminalStatus(
 
     return (
         status ===
-            REQUEST_STATUS.COMPLETED ||
+        REQUEST_STATUS.COMPLETED ||
         status ===
-            REQUEST_STATUS.CANCELED ||
+        REQUEST_STATUS.CANCELED ||
         status ===
-            REQUEST_STATUS.TIMEOUT ||
+        REQUEST_STATUS.TIMEOUT ||
         status ===
-            REQUEST_STATUS.ERROR
+        REQUEST_STATUS.ERROR
     );
 }
 
@@ -1869,7 +2011,7 @@ function isChatCompletedResult(
     if (
         value === null ||
         typeof value !==
-            "object"
+        "object"
     ) {
 
         return false;
@@ -1885,13 +2027,13 @@ function isChatCompletedResult(
 
     return (
         typeof result.agentId ===
-            "string" &&
+        "string" &&
 
         result.status ===
-            "completed" &&
+        "completed" &&
 
         typeof result.content ===
-            "string"
+        "string"
     );
 }
 
@@ -1936,9 +2078,9 @@ function normalizeManagerError(
 
     if (
         error instanceof
-            AgentRegistryError ||
+        AgentRegistryError ||
         error instanceof
-            BridgeManagerError
+        BridgeManagerError
     ) {
 
         return new BrowserChatRequestError(
