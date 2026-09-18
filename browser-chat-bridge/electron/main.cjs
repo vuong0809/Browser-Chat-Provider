@@ -353,26 +353,26 @@ async function sendPromptToChatGPT({
   options = {}
 }) {
 
-console.log(
-  "[Electron][ChatGPT] sendPromptToChatGPT started",
-  {
-    contentLength:
-      typeof content === "string"
-        ? content.length
-        : 0,
-    timeoutMs:
-      options.timeout ||
-      options.timeoutMs ||
-      180_000,
-    url:
-      mainWindow &&
-      !mainWindow.isDestroyed()
-        ? mainWindow.webContents.getURL()
-        : null,
-    timestamp:
-      new Date().toISOString()
-  }
-);
+  console.log(
+    "[Electron][ChatGPT] sendPromptToChatGPT started",
+    {
+      contentLength:
+        typeof content === "string"
+          ? content.length
+          : 0,
+      timeoutMs:
+        options.timeout ||
+        options.timeoutMs ||
+        180_000,
+      url:
+        mainWindow &&
+          !mainWindow.isDestroyed()
+          ? mainWindow.webContents.getURL()
+          : null,
+      timestamp:
+        new Date().toISOString()
+    }
+  );
   if (
     !mainWindow ||
     mainWindow.isDestroyed()
@@ -390,11 +390,29 @@ console.log(
     );
 
   // Browser-native ProseMirror input.
-  await insertPromptWithCDP(
-    content
+  console.log(
+    "[Electron][ChatGPT] Starting CDP input",
+    {
+      contentLength: content.length
+    }
   );
 
-  return mainWindow.webContents.executeJavaScript(`
+  const inputResult =
+    await insertPromptWithCDP(
+      content
+    );
+
+  console.log(
+    "[Electron][ChatGPT] CDP input successful",
+    inputResult
+  );
+
+  console.log(
+    "[Electron][ChatGPT] Starting renderer send/response flow"
+  );
+
+  try {
+    const result = await mainWindow.webContents.executeJavaScript(`
     (async () => {
       const timeoutMs = ${JSON.stringify(timeoutMs)};
       const startedAt = Date.now();
@@ -505,108 +523,198 @@ console.log(
       );
 
       // Wait until ChatGPT exposes its real Send button.
-      const sendButton =
-        await waitFor(
-          () => {
-            const button =
-              findSendButton();
+     console.log(
+  "[Electron][ChatGPT] Waiting for enabled Send button"
+);
 
-            if (
-              !button ||
-              button.disabled ||
-              button.getAttribute(
-                "aria-disabled"
-              ) === "true"
-            ) {
-              return null;
-            }
+const sendButton =
+  await waitFor(
+    () => {
+      const button =
+        findSendButton();
 
-            return button;
-          },
-          "enabled send button"
-        );
+      if (
+        !button ||
+        button.disabled ||
+        button.getAttribute(
+          "aria-disabled"
+        ) === "true"
+      ) {
+        return null;
+      }
 
-      console.log(
-        "[Electron] Clicking ChatGPT Send"
-      );
+      return button;
+    },
+    "enabled send button"
+  );
 
-      sendButton.click();
+console.log(
+  "[Electron][ChatGPT] Send button ready",
+  {
+    testId:
+      sendButton.getAttribute(
+        "data-testid"
+      ),
+    ariaLabel:
+      sendButton.getAttribute(
+        "aria-label"
+      ),
+    disabled:
+      Boolean(sendButton.disabled)
+  }
+);
+
+sendButton.click();
+
+console.log(
+  "[Electron][ChatGPT] Send clicked"
+);
 
       let lastText = "";
       let stableCount = 0;
+      let generationLogged = false;
+      let responseLogged = false;
 
-      while (
-        Date.now() - startedAt <
-        timeoutMs
-      ) {
-        await sleep(1000);
+while (
+  Date.now() - startedAt <
+  timeoutMs
+) {
+  await sleep(1000);
 
-        const texts =
-          getAssistantTexts();
+  const texts =
+    getAssistantTexts();
 
-        const current =
-          texts.at(-1) || "";
+  const current =
+    texts.at(-1) || "";
 
-        const changed =
-          current &&
-          current !== beforeLast;
+  // Detect whether ChatGPT is still generating.
+  const stopButton =
+    Array.from(
+      document.querySelectorAll(
+        "button"
+      )
+    ).find(
+      button =>
+        /stop/i.test(
+          button.getAttribute(
+            "aria-label"
+          ) ||
+          button.textContent ||
+          ""
+        )
+    );
 
-        if (!changed) {
-          continue;
-        }
+  if (
+    stopButton &&
+    !generationLogged
+  ) {
+    generationLogged = true;
 
-        if (
-          current === lastText
-        ) {
-          stableCount += 1;
-        } else {
-          stableCount = 0;
-          lastText = current;
-        }
+    console.log(
+      "[Electron][ChatGPT] Generation started"
+    );
+  }
 
-        const stopButton =
-          Array.from(
-            document.querySelectorAll(
-              "button"
-            )
-          ).find(
-            button =>
-              /stop/i.test(
-                button.getAttribute(
-                  "aria-label"
-                ) ||
-                button.textContent ||
-                ""
-              )
-          );
+  const changed =
+    current &&
+    current !== beforeLast;
 
-        if (
-          stableCount >= 2 &&
-          !stopButton
-        ) {
-          return {
-            content:
-              current,
+  if (
+    changed &&
+    !responseLogged
+  ) {
+    responseLogged = true;
 
-            title:
-              document.title ||
-              null,
-
-            conversationId:
-              location.pathname
-                .match(
-                  /\\/c\\/([^/?#]+)/
-                )?.[1] ||
-              null
-          };
-        }
+    console.log(
+      "[Electron][ChatGPT] Assistant response detected",
+      {
+        contentLength:
+          current.length,
+        assistantCount:
+          texts.length
       }
+    );
+  }
+
+  if (!changed) {
+    continue;
+  }
+
+  if (
+    current === lastText
+  ) {
+    stableCount += 1;
+  } else {
+    stableCount = 0;
+    lastText = current;
+  }
+
+  if (
+    stableCount >= 2 &&
+    !stopButton
+  ) {
+    const conversationId =
+      location.pathname
+        .match(
+          /\\/c\\/([^/?#]+)/
+        )?.[1] ||
+      null;
+
+    console.log(
+      "[Electron][ChatGPT] Response completed",
+      {
+        contentLength:
+          current.length,
+        stableCount,
+        durationMs:
+          Date.now() -
+          startedAt,
+        conversationId
+      }
+    );
+
+    return {
+      content:
+        current,
+
+      title:
+        document.title ||
+        null,
+
+      conversationId
+    };
+  }
+}
 
       throw new Error(
         "Timed out waiting for ChatGPT response"
       );
     })()
   `, true);
+    console.log(
+      "[Electron][ChatGPT] Renderer flow completed",
+      {
+        contentLength:
+          typeof result?.content === "string"
+            ? result.content.length
+            : 0,
+        conversationId:
+          result?.conversationId || null
+      }
+    );
+    return result;
+  } catch (error) {
+    console.error(
+      "[Electron][ChatGPT] Renderer flow failed",
+      {
+        error:
+          error instanceof Error
+            ? error.stack || error.message
+            : String(error)
+      }
+    );
+    throw error;
+  }
 }
 
 function writeRuntimeConfig() {

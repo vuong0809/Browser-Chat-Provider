@@ -218,16 +218,19 @@ class NativeBridge extends EventEmitter {
   }
 
   async handleChatSend(message) {
+    const requestId = message.id;
     const agentId = message.payload?.agentId;
+    const content = message.payload?.message?.content;
     const agent = this.agents.get(agentId);
+
     console.log(
       "[Electron][NativeBridge] chat.send received",
       {
-        requestId: message.id,
-        agentId: message.params?.agentId,
+        requestId,
+        agentId,
         contentLength:
-          typeof message.params?.content === "string"
-            ? message.params.content.length
+          typeof content === "string"
+            ? content.length
             : 0,
         timestamp: new Date().toISOString()
       }
@@ -250,7 +253,6 @@ class NativeBridge extends EventEmitter {
       return;
     }
 
-    const content = message.payload?.message?.content;
 
     if (typeof content !== "string" || !content.trim()) {
       this.send(createError(
