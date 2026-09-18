@@ -77,6 +77,17 @@ function getWebSocketUrl() {
   return process.env.BROWSER_CHAT_WS_URL || process.env.BROWSER_CHAT_WS_UR || DEFAULT_WS_URL;
 }
 
+function getBridgeId() {
+  const args = process.argv.slice(2);
+  const bridgeIdIndex = args.indexOf("--bridge-id");
+
+  if (bridgeIdIndex !== -1 && args[bridgeIdIndex + 1]) {
+    return args[bridgeIdIndex + 1];
+  }
+
+  return process.env.BROWSER_CHAT_BRIDGE_ID || undefined;
+}
+
 function writeRuntimeConfig() {
   const wsUrl = getWebSocketUrl();
   const config = {};
@@ -206,7 +217,8 @@ async function main() {
   createMenu();
 
   nativeBridge = new NativeBridge({
-    wsUrl: getWebSocketUrl()
+    wsUrl: getWebSocketUrl(),
+    bridgeId: getBridgeId()
   });
 
   nativeBridge.on("status", status => {

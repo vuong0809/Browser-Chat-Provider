@@ -3,7 +3,7 @@
 const { EventEmitter } = require("node:events");
 
 const DEFAULT_WS_URL = "ws://127.0.0.1:20128/browser-bridge";
-const DEFAULT_BRIDGE_ID = "electron-main";
+const DEFAULT_BRIDGE_ID = "chrome-main";
 const BRIDGE_VERSION = "0.1.0";
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 15_000;
 

@@ -49,6 +49,12 @@ Or just pass the WebSocket port:
 npm run dev -- --ws-port 20130
 ```
 
+To override the bridge ID:
+
+```powershell
+npm run dev -- --bridge-id chrome-main
+```
+
 Make sure the provider runs on the same port:
 
 ```powershell
@@ -65,6 +71,7 @@ ws://127.0.0.1:20128/browser-bridge
 ## Notes
 
 - Phase 1 uses `electron/native-bridge.cjs` instead of `session.loadExtension()`.
+- The default bridge ID remains `chrome-main` for compatibility with agents registered by the previous extension bridge.
 - `BROWSER_CHAT_WS_URL` is written into `electron/runtime-config.json` before the native bridge connects.
 - The `Browser Chat` menu opens the native popup for status, agent registration, and debugging.
 - Build output is still generated into `dist/content-script.js` and `dist/network-interceptor.js`.
