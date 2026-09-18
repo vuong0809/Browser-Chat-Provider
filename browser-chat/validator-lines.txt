@@ -1,0 +1,1674 @@
+1:// browser-chat/protocol/validator.ts
+2:
+3:import {
+4:    AGENT_ID_PATTERN,
+5:    AGENT_STATUS,
+6:    BRIDGE_STATUS,
+7:    CAPABILITY,
+8:    MAX_AGENT_ID_LENGTH,
+9:    MAX_ERROR_MESSAGE_LENGTH,
+10:    MAX_MESSAGE_LENGTH,
+11:    MESSAGE_TYPE,
+12:    METHOD,
+13:    PROTOCOL_VERSION
+14:} from "./constants";
+15:
+16:import {
+17:    parseMessage
+18:} from "./messages";
+19:
+20:import type {
+21:    BrowserChatEnvelope,
+22:    BrowserChatMethod
+23:} from "./types";
+24:
+25:
+26:// ============================================================
+27:// Result
+28:// ============================================================
+29:
+30:export interface ValidationSuccess {
+31:
+32:    valid: true;
+33:
+34:    message: BrowserChatEnvelope;
+35:}
+36:
+37:
+38:export interface ValidationFailure {
+39:
+40:    valid: false;
+41:
+42:    error: string;
+43:
+44:    path?: string;
+45:}
+46:
+47:
+48:export type ValidationResult =
+49:    | ValidationSuccess
+50:    | ValidationFailure;
+51:
+52:
+53:// ============================================================
+54:// Public API
+55:// ============================================================
+56:
+57:export function validateMessage(
+58:    input: unknown
+59:): ValidationResult {
+60:
+61:    const envelopeError =
+62:        validateEnvelope(
+63:            input
+64:        );
+65:
+66:
+67:    if (envelopeError) {
+68:
+69:        return failure(
+70:            envelopeError.error,
+71:            envelopeError.path
+72:        );
+73:    }
+74:
+75:
+76:    const message =
+77:        input as Record<string, unknown>;
+78:
+79:
+80:    switch (message.type) {
+81:
+82:        case MESSAGE_TYPE.REQUEST:
+83:            return validateRequest(
+84:                message
+85:            );
+86:
+87:
+88:        case MESSAGE_TYPE.RESPONSE:
+89:            return validateResponse(
+90:                message
+91:            );
+92:
+93:
+94:        case MESSAGE_TYPE.EVENT:
+95:            return validateEvent(
+96:                message
+97:            );
+98:
+99:
+100:        case MESSAGE_TYPE.ERROR:
+101:            return validateErrorEnvelope(
+102:                message
+103:            );
+104:
+105:
+106:        default:
+107:
+108:            return failure(
+109:                "Unsupported message type",
+110:                "type"
+111:            );
+112:    }
+113:}
+114:
+115:
+116:// ============================================================
+117:// Parse + validate
+118:// ============================================================
+119:
+120:export function parseAndValidateMessage(
+121:    data: unknown
+122:): ValidationResult {
+123:
+124:    let parsed: unknown;
+125:
+126:
+127:    try {
+128:
+129:        parsed =
+130:            parseMessage(
+131:                data
+132:            );
+133:
+134:    } catch (error) {
+135:
+136:        return failure(
+137:            error instanceof Error
+138:                ? error.message
+139:                : String(error)
+140:        );
+141:    }
+142:
+143:
+144:    return validateMessage(
+145:        parsed
+146:    );
+147:}
+148:
+149:
+150:// ============================================================
+151:// Assert
+152:// ============================================================
+153:
+154:export function assertValidMessage(
+155:    input: unknown
+156:): BrowserChatEnvelope {
+157:
+158:    const result =
+159:        validateMessage(
+160:            input
+161:        );
+162:
+163:
+164:    if (!result.valid) {
+165:
+166:        const path =
+167:            result.path
+168:                ? ` at ${result.path}`
+169:                : "";
+170:
+171:
+172:        throw new Error(
+173:            `${result.error}${path}`
+174:        );
+175:    }
+176:
+177:
+178:    return result.message;
+179:}
+180:
+181:
+182:// ============================================================
+183:// Envelope
+184:// ============================================================
+185:
+186:function validateEnvelope(
+187:    input: unknown
+188:): ValidationFailure | null {
+189:
+190:    if (!isPlainObject(input)) {
+191:
+192:        return failure(
+193:            "Message must be an object"
+194:        );
+195:    }
+196:
+197:
+198:    if (
+199:        input.v !==
+200:        PROTOCOL_VERSION
+201:    ) {
+202:
+203:        return failure(
+204:            `Unsupported protocol version: ${String(input.v)}`,
+205:            "v"
+206:        );
+207:    }
+208:
+209:
+210:    if (
+211:        !isNonEmptyString(
+212:            input.type
+213:        )
+214:    ) {
+215:
+216:        return failure(
+217:            "Message type is required",
+218:            "type"
+219:        );
+220:    }
+221:
+222:
+223:    if (
+224:        !Object.values(
+225:            MESSAGE_TYPE
+226:        ).includes(
+227:            input.type as never
+228:        )
+229:    ) {
+230:
+231:        return failure(
+232:            `Unsupported message type: ${String(input.type)}`,
+233:            "type"
+234:        );
+235:    }
+236:
+237:
+238:    if (
+239:        !isValidId(
+240:            input.id
+241:        )
+242:    ) {
+243:
+244:        return failure(
+245:            "Message id is invalid",
+246:            "id"
+247:        );
+248:    }
+249:
+250:
+251:    if (
+252:        !isTimestamp(
+253:            input.timestamp
+254:        )
+255:    ) {
+256:
+257:        return failure(
+258:            "Message timestamp is invalid",
+259:            "timestamp"
+260:        );
+261:    }
+262:
+263:
+264:    return null;
+265:}
+266:
+267:
+268:// ============================================================
+269:// Request
+270:// ============================================================
+271:
+272:function validateRequest(
+273:    message: Record<string, unknown>
+274:): ValidationResult {
+275:
+276:    const methodResult =
+277:        validateMethod(
+278:            message.method
+279:        );
+280:
+281:
+282:    if (!methodResult.valid) {
+283:        return methodResult;
+284:    }
+285:
+286:
+287:    if (
+288:        !isPlainObject(
+289:            message.payload
+290:        )
+291:    ) {
+292:
+293:        return failure(
+294:            "Request payload must be an object",
+295:            "payload"
+296:        );
+297:    }
+298:
+299:
+300:    const payloadResult =
+301:        validateMethodPayload(
+302:            message.method as BrowserChatMethod,
+303:            message.payload,
+304:            "request"
+305:        );
+306:
+307:
+308:    if (!payloadResult.valid) {
+309:        return payloadResult;
+310:    }
+311:
+312:
+313:    return success(
+314:        message
+315:    );
+316:}
+317:
+318:
+319:// ============================================================
+320:// Response
+321:// ============================================================
+322:
+323:function validateResponse(
+324:    message: Record<string, unknown>
+325:): ValidationResult {
+326:
+327:    if (
+328:        !Object.prototype.hasOwnProperty.call(
+329:            message,
+330:            "result"
+331:        )
+332:    ) {
+333:
+334:        return failure(
+335:            "Response result is required",
+336:            "result"
+337:        );
+338:    }
+339:
+340:
+341:    /*
+342:     * A response does not contain a method in the V1 protocol.
+343:     *
+344:     * The request ID is used by RequestManager to determine
+345:     * which request this response belongs to.
+346:     *
+347:     * Method-specific response validation therefore happens
+348:     * later when RequestManager knows the original request.
+349:     */
+350:
+351:    return success(
+352:        message
+353:    );
+354:}
+355:
+356:
+357:// ============================================================
+358:// Event
+359:// ============================================================
+360:
+361:function validateEvent(
+362:    message: Record<string, unknown>
+363:): ValidationResult {
+364:
+365:    const methodResult =
+366:        validateMethod(
+367:            message.method
+368:        );
+369:
+370:
+371:    if (!methodResult.valid) {
+372:        return methodResult;
+373:    }
+374:
+375:
+376:    if (
+377:        !isPlainObject(
+378:            message.payload
+379:        )
+380:    ) {
+381:
+382:        return failure(
+383:            "Event payload must be an object",
+384:            "payload"
+385:        );
+386:    }
+387:
+388:
+389:    const payloadResult =
+390:        validateMethodPayload(
+391:            message.method as BrowserChatMethod,
+392:            message.payload,
+393:            "event"
+394:        );
+395:
+396:
+397:    if (!payloadResult.valid) {
+398:        return payloadResult;
+399:    }
+400:
+401:
+402:    return success(
+403:        message
+404:    );
+405:}
+406:
+407:
+408:// ============================================================
+409:// Error envelope
+410:// ============================================================
+411:
+412:function validateErrorEnvelope(
+413:    message: Record<string, unknown>
+414:): ValidationResult {
+415:
+416:    if (
+417:        !isPlainObject(
+418:            message.error
+419:        )
+420:    ) {
+421:
+422:        return failure(
+423:            "Error payload must be an object",
+424:            "error"
+425:        );
+426:    }
+427:
+428:
+429:    const error =
+430:        message.error;
+431:
+432:
+433:    if (
+434:        !isNonEmptyString(
+435:            error.code
+436:        )
+437:    ) {
+438:
+439:        return failure(
+440:            "Error code is required",
+441:            "error.code"
+442:        );
+443:    }
+444:
+445:
+446:    if (
+447:        !isNonEmptyString(
+448:            error.message
+449:        )
+450:    ) {
+451:
+452:        return failure(
+453:            "Error message is required",
+454:            "error.message"
+455:        );
+456:    }
+457:
+458:
+459:    if (
+460:        error.message.length >
+461:        MAX_ERROR_MESSAGE_LENGTH
+462:    ) {
+463:
+464:        return failure(
+465:            "Error message is too long",
+466:            "error.message"
+467:        );
+468:    }
+469:
+470:
+471:    return success(
+472:        message
+473:    );
+474:}
+475:
+476:
+477:// ============================================================
+478:// Method
+479:// ============================================================
+480:
+481:function validateMethod(
+482:    value: unknown
+483:): ValidationResult {
+484:
+485:    if (
+486:        !isNonEmptyString(
+487:            value
+488:        )
+489:    ) {
+490:
+491:        return failure(
+492:            "Method is required",
+493:            "method"
+494:        );
+495:    }
+496:
+497:
+498:    if (
+499:        !Object.values(
+500:            METHOD
+501:        ).includes(
+502:            value as BrowserChatMethod
+503:        )
+504:    ) {
+505:
+506:        return failure(
+507:            `Unsupported method: ${value}`,
+508:            "method"
+509:        );
+510:    }
+511:
+512:
+513:    return {
+514:        valid: true,
+515:        message: {} as BrowserChatEnvelope
+516:    };
+517:}
+518:
+519:
+520:// ============================================================
+521:// Method payload
+522:// ============================================================
+523:
+524:function validateMethodPayload(
+525:    method: BrowserChatMethod,
+526:    payload: Record<string, unknown>,
+527:    direction: "request" | "event"
+528:): ValidationResult {
+529:
+530:    switch (method) {
+531:
+532:        // ----------------------------------------------------
+533:        // Bridge
+534:        // ----------------------------------------------------
+535:
+536:        case METHOD.BRIDGE_REGISTER:
+537:
+538:            return validateBridgeRegister(
+539:                payload,
+540:                direction
+541:            );
+542:
+543:
+544:        case METHOD.BRIDGE_HEARTBEAT:
+545:
+546:            return validateBridgeHeartbeat(
+547:                payload,
+548:                direction
+549:            );
+550:
+551:
+552:        case METHOD.BRIDGE_STATUS:
+553:
+554:            return validateBridgeStatus(
+555:                payload,
+556:                direction
+557:            );
+558:
+559:
+560:        /*
+561:         * bridge.registered is represented as a response in V1,
+562:         * therefore it should not normally arrive as request/event.
+563:         */
+564:
+565:        case METHOD.BRIDGE_REGISTERED:
+566:
+567:            return failure(
+568:                "bridge.registered must be sent as a response",
+569:                "method"
+570:            );
+571:
+572:
+573:        // ----------------------------------------------------
+574:        // Agent
+575:        // ----------------------------------------------------
+576:
+577:        case METHOD.AGENT_REGISTER:
+578:
+579:            return validateAgentRegister(
+580:                payload
+581:            );
+582:
+583:
+584:        case METHOD.AGENT_UNREGISTER:
+585:
+586:            return validateAgentUnregister(
+587:                payload
+588:            );
+589:
+590:
+591:        case METHOD.AGENT_STATUS:
+592:
+593:            return validateAgentStatus(
+594:                payload
+595:            );
+596:
+597:
+598:        case METHOD.AGENT_LIST:
+599:
+600:            return validateAgentList(
+601:                payload,
+602:                direction
+603:            );
+604:
+605:
+606:        // ----------------------------------------------------
+607:        // Chat
+608:        // ----------------------------------------------------
+609:
+610:        case METHOD.CHAT_SEND:
+611:
+612:            return validateChatSend(
+613:                payload,
+614:                direction
+615:            );
+616:
+617:
+618:        case METHOD.CHAT_DELTA:
+619:
+620:            return validateChatDelta(
+621:                payload,
+622:                direction
+623:            );
+624:
+625:
+626:        case METHOD.CHAT_COMPLETED:
+627:
+628:            /*
+629:             * chat.completed is a response in V1.
+630:             */
+631:
+632:            return failure(
+633:                "chat.completed must be sent as a response",
+634:                "method"
+635:            );
+636:
+637:
+638:        case METHOD.CHAT_CANCEL:
+639:
+640:            return validateChatCancel(
+641:                payload,
+642:                direction
+643:            );
+644:
+645:
+646:        case METHOD.CHAT_ERROR:
+647:
+648:            return validateChatError(
+649:                payload,
+650:                direction
+651:            );
+652:
+653:
+654:        default:
+655:
+656:            return failure(
+657:                `Unsupported method: ${method}`,
+658:                "method"
+659:            );
+660:    }
+661:}
+662:
+663:
+664:// ============================================================
+665:// bridge.register
+666:// ============================================================
+667:
+668:function validateBridgeRegister(
+669:    payload: Record<string, unknown>,
+670:    direction: "request" | "event"
+671:): ValidationResult {
+672:
+673:    if (
+674:        direction !== "request"
+675:    ) {
+676:
+677:        return failure(
+678:            "bridge.register must be a request",
+679:            "type"
+680:        );
+681:    }
+682:
+683:
+684:    if (
+685:        !isNonEmptyString(
+686:            payload.bridgeId
+687:        )
+688:    ) {
+689:
+690:        return failure(
+691:            "bridgeId is required",
+692:            "payload.bridgeId"
+693:        );
+694:    }
+695:
+696:
+697:    if (
+698:        !isNonEmptyString(
+699:            payload.bridgeVersion
+700:        )
+701:    ) {
+702:
+703:        return failure(
+704:            "bridgeVersion is required",
+705:            "payload.bridgeVersion"
+706:        );
+707:    }
+708:
+709:
+710:    if (
+711:        !Array.isArray(
+712:            payload.capabilities
+713:        )
+714:    ) {
+715:
+716:        return failure(
+717:            "capabilities must be an array",
+718:            "payload.capabilities"
+719:        );
+720:    }
+721:
+722:
+723:    if (
+724:        !payload.capabilities.every(
+725:            isCapability
+726:        )
+727:    ) {
+728:
+729:        return failure(
+730:            "Invalid bridge capability",
+731:            "payload.capabilities"
+732:        );
+733:    }
+734:
+735:
+736:    if (
+737:        payload.token !== undefined &&
+738:        typeof payload.token !== "string"
+739:    ) {
+740:
+741:        return failure(
+742:            "token must be a string",
+743:            "payload.token"
+744:        );
+745:    }
+746:
+747:
+748:    return successPayload();
+749:}
+750:
+751:
+752:// ============================================================
+753:// bridge.heartbeat
+754:// ============================================================
+755:
+756:function validateBridgeHeartbeat(
+757:    payload: Record<string, unknown>,
+758:    direction: "request" | "event"
+759:): ValidationResult {
+760:
+761:    if (
+762:        direction !== "event"
+763:    ) {
+764:
+765:        return failure(
+766:            "bridge.heartbeat must be an event",
+767:            "type"
+768:        );
+769:    }
+770:
+771:
+772:    if (
+773:        !isNonEmptyString(
+774:            payload.bridgeId
+775:        )
+776:    ) {
+777:
+778:        return failure(
+779:            "bridgeId is required",
+780:            "payload.bridgeId"
+781:        );
+782:    }
+783:
+784:
+785:    if (
+786:        payload.status !== undefined &&
+787:        !isBridgeStatus(
+788:            payload.status
+789:        )
+790:    ) {
+791:
+792:        return failure(
+793:            "Invalid bridge status",
+794:            "payload.status"
+795:        );
+796:    }
+797:
+798:
+799:    if (
+800:        payload.agentCount !== undefined &&
+801:        !isNonNegativeInteger(
+802:            payload.agentCount
+803:        )
+804:    ) {
+805:
+806:        return failure(
+807:            "agentCount must be a non-negative integer",
+808:            "payload.agentCount"
+809:        );
+810:    }
+811:
+812:
+813:    return successPayload();
+814:}
+815:
+816:
+817:// ============================================================
+818:// bridge.status
+819:// ============================================================
+820:
+821:function validateBridgeStatus(
+822:    payload: Record<string, unknown>,
+823:    direction: "request" | "event"
+824:): ValidationResult {
+825:
+826:    if (
+827:        direction !== "event"
+828:    ) {
+829:
+830:        return failure(
+831:            "bridge.status must be an event",
+832:            "type"
+833:        );
+834:    }
+835:
+836:
+837:    if (
+838:        !isNonEmptyString(
+839:            payload.bridgeId
+840:        )
+841:    ) {
+842:
+843:        return failure(
+844:            "bridgeId is required",
+845:            "payload.bridgeId"
+846:        );
+847:    }
+848:
+849:
+850:    if (
+851:        !isBridgeStatus(
+852:            payload.status
+853:        )
+854:    ) {
+855:
+856:        return failure(
+857:            "Invalid bridge status",
+858:            "payload.status"
+859:        );
+860:    }
+861:
+862:
+863:    return successPayload();
+864:}
+865:
+866:
+867:// ============================================================
+868:// agent.register
+869:// ============================================================
+870:
+871:function validateAgentRegister(
+872:    payload: Record<string, unknown>
+873:): ValidationResult {
+874:
+875:    const bridge =
+876:        validateRequiredString(
+877:            payload.bridgeId,
+878:            "payload.bridgeId"
+879:        );
+880:
+881:
+882:    if (bridge) {
+883:        return bridge;
+884:    }
+885:
+886:
+887:    const agent =
+888:        validateAgentId(
+889:            payload.agentId,
+890:            "payload.agentId"
+891:        );
+892:
+893:
+894:    if (agent) {
+895:        return agent;
+896:    }
+897:
+898:
+899:    if (
+900:        !isNonEmptyString(
+901:            payload.provider
+902:        )
+903:    ) {
+904:
+905:        return failure(
+906:            "provider is required",
+907:            "payload.provider"
+908:        );
+909:    }
+910:
+911:
+912:    if (
+913:        payload.capabilities !== undefined
+914:    ) {
+915:
+916:        if (
+917:            !Array.isArray(
+918:                payload.capabilities
+919:            ) ||
+920:            !payload.capabilities.every(
+921:                isCapability
+922:            )
+923:        ) {
+924:
+925:            return failure(
+926:                "Invalid agent capabilities",
+927:                "payload.capabilities"
+928:            );
+929:        }
+930:    }
+931:
+932:
+933:    if (
+934:        payload.status !== undefined &&
+935:        !isAgentStatus(
+936:            payload.status
+937:        )
+938:    ) {
+939:
+940:        return failure(
+941:            "Invalid agent status",
+942:            "payload.status"
+943:        );
+944:    }
+945:
+946:
+947:    return successPayload();
+948:}
+949:
+950:
+951:// ============================================================
+952:// agent.unregister
+953:// ============================================================
+954:
+955:function validateAgentUnregister(
+956:    payload: Record<string, unknown>
+957:): ValidationResult {
+958:
+959:    const bridge =
+960:        validateRequiredString(
+961:            payload.bridgeId,
+962:            "payload.bridgeId"
+963:        );
+964:
+965:
+966:    if (bridge) {
+967:        return bridge;
+968:    }
+969:
+970:
+971:    const agent =
+972:        validateAgentId(
+973:            payload.agentId,
+974:            "payload.agentId"
+975:        );
+976:
+977:
+978:    if (agent) {
+979:        return agent;
+980:    }
+981:
+982:
+983:    if (
+984:        payload.reason !== undefined &&
+985:        typeof payload.reason !== "string"
+986:    ) {
+987:
+988:        return failure(
+989:            "reason must be a string",
+990:            "payload.reason"
+991:        );
+992:    }
+993:
+994:
+995:    return successPayload();
+996:}
+997:
+998:
+999:// ============================================================
+1000:// agent.status
+1001:// ============================================================
+1002:
+1003:function validateAgentStatus(
+1004:    payload: Record<string, unknown>
+1005:): ValidationResult {
+1006:
+1007:    const agent =
+1008:        validateAgentId(
+1009:            payload.agentId,
+1010:            "payload.agentId"
+1011:        );
+1012:
+1013:
+1014:    if (agent) {
+1015:        return agent;
+1016:    }
+1017:
+1018:
+1019:    if (
+1020:        !isAgentStatus(
+1021:            payload.status
+1022:        )
+1023:    ) {
+1024:
+1025:        return failure(
+1026:            "Invalid agent status",
+1027:            "payload.status"
+1028:        );
+1029:    }
+1030:
+1031:
+1032:    if (
+1033:        payload.requestId !== undefined &&
+1034:        payload.requestId !== null &&
+1035:        !isValidId(
+1036:            payload.requestId
+1037:        )
+1038:    ) {
+1039:
+1040:        return failure(
+1041:            "Invalid requestId",
+1042:            "payload.requestId"
+1043:        );
+1044:    }
+1045:
+1046:
+1047:    return successPayload();
+1048:}
+1049:
+1050:
+1051:// ============================================================
+1052:// agent.list
+1053:// ============================================================
+1054:
+1055:function validateAgentList(
+1056:    payload: Record<string, unknown>,
+1057:    direction: "request" | "event"
+1058:): ValidationResult {
+1059:
+1060:    if (
+1061:        direction !== "request"
+1062:    ) {
+1063:
+1064:        return failure(
+1065:            "agent.list must be a request",
+1066:            "type"
+1067:        );
+1068:    }
+1069:
+1070:
+1071:    if (
+1072:        payload.bridgeId !== undefined &&
+1073:        !isNonEmptyString(
+1074:            payload.bridgeId
+1075:        )
+1076:    ) {
+1077:
+1078:        return failure(
+1079:            "bridgeId must be a non-empty string",
+1080:            "payload.bridgeId"
+1081:        );
+1082:    }
+1083:
+1084:
+1085:    return successPayload();
+1086:}
+1087:
+1088:
+1089:// ============================================================
+1090:// chat.send
+1091:// ============================================================
+1092:
+1093:function validateChatSend(
+1094:    payload: Record<string, unknown>,
+1095:    direction: "request" | "event"
+1096:): ValidationResult {
+1097:
+1098:    if (
+1099:        direction !== "request"
+1100:    ) {
+1101:
+1102:        return failure(
+1103:            "chat.send must be a request",
+1104:            "type"
+1105:        );
+1106:    }
+1107:
+1108:
+1109:    const agent =
+1110:        validateAgentId(
+1111:            payload.agentId,
+1112:            "payload.agentId"
+1113:        );
+1114:
+1115:
+1116:    if (agent) {
+1117:        return agent;
+1118:    }
+1119:
+1120:
+1121:    if (
+1122:        !isPlainObject(
+1123:            payload.message
+1124:        )
+1125:    ) {
+1126:
+1127:        return failure(
+1128:            "message must be an object",
+1129:            "payload.message"
+1130:        );
+1131:    }
+1132:
+1133:
+1134:    if (
+1135:        payload.message.role !==
+1136:        "user"
+1137:    ) {
+1138:
+1139:        return failure(
+1140:            "Browser chat.send role must be user",
+1141:            "payload.message.role"
+1142:        );
+1143:    }
+1144:
+1145:
+1146:    if (
+1147:        !isNonEmptyString(
+1148:            payload.message.content
+1149:        )
+1150:    ) {
+1151:
+1152:        return failure(
+1153:            "message content is required",
+1154:            "payload.message.content"
+1155:        );
+1156:    }
+1157:
+1158:
+1159:    if (
+1160:        payload.message.content.length >
+1161:        MAX_MESSAGE_LENGTH
+1162:    ) {
+1163:
+1164:        return failure(
+1165:            "message content is too long",
+1166:            "payload.message.content"
+1167:        );
+1168:    }
+1169:
+1170:
+1171:    if (
+1172:        payload.options !== undefined
+1173:    ) {
+1174:
+1175:        if (
+1176:            !isPlainObject(
+1177:                payload.options
+1178:            )
+1179:        ) {
+1180:
+1181:            return failure(
+1182:                "options must be an object",
+1183:                "payload.options"
+1184:            );
+1185:        }
+1186:
+1187:
+1188:        if (
+1189:            payload.options.stream !== undefined &&
+1190:            typeof payload.options.stream !== "boolean"
+1191:        ) {
+1192:
+1193:            return failure(
+1194:                "stream must be boolean",
+1195:                "payload.options.stream"
+1196:            );
+1197:        }
+1198:
+1199:
+1200:        if (
+1201:            payload.options.timeout !== undefined &&
+1202:            !isPositiveNumber(
+1203:                payload.options.timeout
+1204:            )
+1205:        ) {
+1206:
+1207:            return failure(
+1208:                "timeout must be a positive number",
+1209:                "payload.options.timeout"
+1210:            );
+1211:        }
+1212:    }
+1213:
+1214:
+1215:    return successPayload();
+1216:}
+1217:
+1218:
+1219:// ============================================================
+1220:// chat.delta
+1221:// ============================================================
+1222:
+1223:function validateChatDelta(
+1224:    payload: Record<string, unknown>,
+1225:    direction: "request" | "event"
+1226:): ValidationResult {
+1227:
+1228:    if (
+1229:        direction !== "event"
+1230:    ) {
+1231:
+1232:        return failure(
+1233:            "chat.delta must be an event",
+1234:            "type"
+1235:        );
+1236:    }
+1237:
+1238:
+1239:    if (
+1240:        !isValidId(
+1241:            payload.requestId
+1242:        )
+1243:    ) {
+1244:
+1245:        return failure(
+1246:            "Invalid requestId",
+1247:            "payload.requestId"
+1248:        );
+1249:    }
+1250:
+1251:
+1252:    const agent =
+1253:        validateAgentId(
+1254:            payload.agentId,
+1255:            "payload.agentId"
+1256:        );
+1257:
+1258:
+1259:    if (agent) {
+1260:        return agent;
+1261:    }
+1262:
+1263:
+1264:    if (
+1265:        !isNonNegativeInteger(
+1266:            payload.seq
+1267:        )
+1268:    ) {
+1269:
+1270:        return failure(
+1271:            "seq must be a non-negative integer",
+1272:            "payload.seq"
+1273:        );
+1274:    }
+1275:
+1276:
+1277:    if (
+1278:        typeof payload.delta !== "string"
+1279:    ) {
+1280:
+1281:        return failure(
+1282:            "delta must be a string",
+1283:            "payload.delta"
+1284:        );
+1285:    }
+1286:
+1287:
+1288:    if (
+1289:        payload.fullText !== undefined &&
+1290:        typeof payload.fullText !== "string"
+1291:    ) {
+1292:
+1293:        return failure(
+1294:            "fullText must be a string",
+1295:            "payload.fullText"
+1296:        );
+1297:    }
+1298:
+1299:
+1300:    if (
+1301:        payload.replace !== undefined &&
+1302:        typeof payload.replace !== "boolean"
+1303:    ) {
+1304:
+1305:        return failure(
+1306:            "replace must be boolean",
+1307:            "payload.replace"
+1308:        );
+1309:    }
+1310:
+1311:
+1312:    return successPayload();
+1313:}
+1314:
+1315:
+1316:// ============================================================
+1317:// chat.cancel
+1318:// ============================================================
+1319:
+1320:function validateChatCancel(
+1321:    payload: Record<string, unknown>,
+1322:    direction: "request" | "event"
+1323:): ValidationResult {
+1324:
+1325:    if (
+1326:        direction !== "request"
+1327:    ) {
+1328:
+1329:        return failure(
+1330:            "chat.cancel must be a request",
+1331:            "type"
+1332:        );
+1333:    }
+1334:
+1335:
+1336:    if (
+1337:        !isValidId(
+1338:            payload.requestId
+1339:        )
+1340:    ) {
+1341:
+1342:        return failure(
+1343:            "Invalid requestId",
+1344:            "payload.requestId"
+1345:        );
+1346:    }
+1347:
+1348:
+1349:    if (
+1350:        payload.agentId !== undefined
+1351:    ) {
+1352:
+1353:        const agent =
+1354:            validateAgentId(
+1355:                payload.agentId,
+1356:                "payload.agentId"
+1357:            );
+1358:
+1359:
+1360:        if (agent) {
+1361:            return agent;
+1362:        }
+1363:    }
+1364:
+1365:
+1366:    return successPayload();
+1367:}
+1368:
+1369:
+1370:// ============================================================
+1371:// chat.error
+1372:// ============================================================
+1373:
+1374:function validateChatError(
+1375:    payload: Record<string, unknown>,
+1376:    direction: "request" | "event"
+1377:): ValidationResult {
+1378:
+1379:    if (
+1380:        direction !== "event"
+1381:    ) {
+1382:
+1383:        return failure(
+1384:            "chat.error must be an event",
+1385:            "type"
+1386:        );
+1387:    }
+1388:
+1389:
+1390:    if (
+1391:        !isValidId(
+1392:            payload.requestId
+1393:        )
+1394:    ) {
+1395:
+1396:        return failure(
+1397:            "Invalid requestId",
+1398:            "payload.requestId"
+1399:        );
+1400:    }
+1401:
+1402:
+1403:    const agent =
+1404:        validateAgentId(
+1405:            payload.agentId,
+1406:            "payload.agentId"
+1407:        );
+1408:
+1409:
+1410:    if (agent) {
+1411:        return agent;
+1412:    }
+1413:
+1414:
+1415:    if (
+1416:        !isNonEmptyString(
+1417:            payload.message
+1418:        )
+1419:    ) {
+1420:
+1421:        return failure(
+1422:            "message is required",
+1423:            "payload.message"
+1424:        );
+1425:    }
+1426:
+1427:
+1428:    if (
+1429:        payload.message.length >
+1430:        MAX_ERROR_MESSAGE_LENGTH
+1431:    ) {
+1432:
+1433:        return failure(
+1434:            "Error message is too long",
+1435:            "payload.message"
+1436:        );
+1437:    }
+1438:
+1439:
+1440:    return successPayload();
+1441:}
+1442:
+1443:
+1444:// ============================================================
+1445:// Helpers
+1446:// ============================================================
+1447:
+1448:function isPlainObject(
+1449:    value: unknown
+1450:): value is Record<string, unknown> {
+1451:
+1452:    return (
+1453:        value !== null &&
+1454:        typeof value === "object" &&
+1455:        !Array.isArray(value)
+1456:    );
+1457:}
+1458:
+1459:
+1460:function isNonEmptyString(
+1461:    value: unknown
+1462:): value is string {
+1463:
+1464:    return (
+1465:        typeof value === "string" &&
+1466:        value.trim().length > 0
+1467:    );
+1468:}
+1469:
+1470:
+1471:function isTimestamp(
+1472:    value: unknown
+1473:): value is number {
+1474:
+1475:    return (
+1476:        typeof value === "number" &&
+1477:        Number.isFinite(value) &&
+1478:        value > 0
+1479:    );
+1480:}
+1481:
+1482:
+1483:function isValidId(
+1484:    value: unknown
+1485:): value is string {
+1486:
+1487:    return (
+1488:        typeof value === "string" &&
+1489:        value.length > 0 &&
+1490:        value.length <= 256
+1491:    );
+1492:}
+1493:
+1494:
+1495:function isNonNegativeInteger(
+1496:    value: unknown
+1497:): value is number {
+1498:
+1499:    return (
+1500:        typeof value === "number" &&
+1501:        Number.isInteger(value) &&
+1502:        value >= 0
+1503:    );
+1504:}
+1505:
+1506:
+1507:function isPositiveNumber(
+1508:    value: unknown
+1509:): value is number {
+1510:
+1511:    return (
+1512:        typeof value === "number" &&
+1513:        Number.isFinite(value) &&
+1514:        value > 0
+1515:    );
+1516:}
+1517:
+1518:
+1519:function isCapability(
+1520:    value: unknown
+1521:): boolean {
+1522:
+1523:    return (
+1524:        typeof value === "string" &&
+1525:        value.length > 0
+1526:    );
+1527:}
+1528:
+1529:
+1530:function isBridgeStatus(
+1531:    value: unknown
+1532:): boolean {
+1533:
+1534:    return Object.values(
+1535:        BRIDGE_STATUS
+1536:    ).includes(
+1537:        value as never
+1538:    );
+1539:}
+1540:
+1541:
+1542:function isAgentStatus(
+1543:    value: unknown
+1544:): boolean {
+1545:
+1546:    return Object.values(
+1547:        AGENT_STATUS
+1548:    ).includes(
+1549:        value as never
+1550:    );
+1551:}
+1552:
+1553:
+1554:function validateAgentId(
+1555:    value: unknown,
+1556:    path: string
+1557:): ValidationFailure | null {
+1558:
+1559:    if (
+1560:        !isNonEmptyString(
+1561:            value
+1562:        )
+1563:    ) {
+1564:
+1565:        return failure(
+1566:            "agentId is required",
+1567:            path
+1568:        );
+1569:    }
+1570:
+1571:
+1572:    if (
+1573:        value.length >
+1574:        MAX_AGENT_ID_LENGTH
+1575:    ) {
+1576:
+1577:        return failure(
+1578:            `agentId must not exceed ${MAX_AGENT_ID_LENGTH} characters`,
+1579:            path
+1580:        );
+1581:    }
+1582:
+1583:
+1584:    if (
+1585:        !AGENT_ID_PATTERN.test(
+1586:            value
+1587:        )
+1588:    ) {
+1589:
+1590:        return failure(
+1591:            "agentId may contain only letters, numbers, hyphen and underscore",
+1592:            path
+1593:        );
+1594:    }
+1595:
+1596:
+1597:    return null;
+1598:}
+1599:
+1600:
+1601:function validateRequiredString(
+1602:    value: unknown,
+1603:    path: string
+1604:): ValidationFailure | null {
+1605:
+1606:    if (
+1607:        !isNonEmptyString(
+1608:            value
+1609:        )
+1610:    ) {
+1611:
+1612:        return failure(
+1613:            "Value is required",
+1614:            path
+1615:        );
+1616:    }
+1617:
+1618:
+1619:    return null;
+1620:}
+1621:
+1622:
+1623:// ============================================================
+1624:// Result helpers
+1625:// ============================================================
+1626:
+1627:function success(
+1628:    message: Record<string, unknown>
+1629:): ValidationSuccess {
+1630:
+1631:    return {
+1632:        valid: true,
+1633:
+1634:        message:
+1635:            message as unknown as
+1636:            BrowserChatEnvelope
+1637:    };
+1638:}
+1639:
+1640:
+1641:/*
+1642: * Used internally while validating only a payload.
+1643: *
+1644: * The temporary message is never exposed when validation of the
+1645: * outer envelope completes successfully.
+1646: */
+1647:
+1648:function successPayload(): ValidationSuccess {
+1649:
+1650:    return {
+1651:        valid: true,
+1652:        message:
+1653:            {} as BrowserChatEnvelope
+1654:    };
+1655:}
+1656:
+1657:
+1658:function failure(
+1659:    error: string,
+1660:    path?: string
+1661:): ValidationFailure {
+1662:
+1663:    return {
+1664:        valid: false,
+1665:
+1666:        error,
+1667:
+1668:        ...(path
+1669:            ? {
+1670:                path
+1671:            }
+1672:            : {})
+1673:    };
+1674:}

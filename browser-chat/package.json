@@ -1,0 +1,10 @@
+{
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "@types/ws": "^8.18.1",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}

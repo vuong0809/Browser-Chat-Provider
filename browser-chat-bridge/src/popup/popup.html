@@ -1,0 +1,372 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <title>
+    9Router Browser Chat Bridge
+  </title>
+
+  <link
+    rel="stylesheet"
+    href="./popup.css"
+  >
+</head>
+
+<body>
+
+  <main class="app">
+
+    <!-- ======================================================
+         Header
+         ====================================================== -->
+
+    <header class="header">
+
+      <div class="header__content">
+
+        <div class="brand">
+          <div class="brand__mark">
+            9R
+          </div>
+
+          <div>
+            <h1 class="brand__title">
+              Browser Chat Bridge
+            </h1>
+
+            <p class="brand__subtitle">
+              9Router
+            </p>
+          </div>
+        </div>
+
+
+        <div
+          id="bridge-status"
+          class="status-badge status-badge--offline"
+          title="Bridge status"
+        >
+          <span class="status-badge__dot"></span>
+
+          <span id="bridge-status-text">
+            Offline
+          </span>
+        </div>
+
+      </div>
+
+    </header>
+
+
+    <!-- ======================================================
+         Current browser tab
+         ====================================================== -->
+
+    <section class="card">
+
+      <div class="card__header">
+
+        <div>
+          <h2 class="card__title">
+            Current Chat
+          </h2>
+
+          <p class="card__description">
+            Register this ChatGPT conversation as a 9Router agent.
+          </p>
+        </div>
+
+      </div>
+
+
+      <div class="chat-info">
+
+        <div class="chat-info__row">
+
+          <span class="chat-info__label">
+            Provider
+          </span>
+
+          <span
+            id="provider-name"
+            class="chat-info__value"
+          >
+            Detecting...
+          </span>
+
+        </div>
+
+
+        <div class="chat-info__row">
+
+          <span class="chat-info__label">
+            Conversation
+          </span>
+
+          <span
+            id="conversation-title"
+            class="chat-info__value chat-info__value--truncate"
+            title=""
+          >
+            —
+          </span>
+
+        </div>
+
+
+        <div class="chat-info__row">
+
+          <span class="chat-info__label">
+            Status
+          </span>
+
+          <span
+            id="provider-status"
+            class="chat-info__value"
+          >
+            Checking...
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <!-- ====================================================
+           Unsupported page
+           ==================================================== -->
+
+      <div
+        id="unsupported-message"
+        class="notice notice--warning hidden"
+      >
+        Open a ChatGPT conversation before registering an agent.
+      </div>
+
+
+      <!-- ====================================================
+           Registration form
+           ==================================================== -->
+
+      <form
+        id="agent-form"
+        class="agent-form"
+        autocomplete="off"
+      >
+
+        <label
+          class="field"
+          for="agent-id"
+        >
+
+          <span class="field__label">
+            Agent name
+          </span>
+
+          <input
+            id="agent-id"
+            class="field__input"
+            type="text"
+            name="agentId"
+            placeholder="architect"
+            maxlength="64"
+            spellcheck="false"
+            autocomplete="off"
+          >
+
+          <span class="field__hint">
+            Letters, numbers, hyphen and underscore only.
+          </span>
+
+        </label>
+
+
+        <button
+          id="register-button"
+          class="button button--primary"
+          type="submit"
+          disabled
+        >
+          Register Agent
+        </button>
+
+      </form>
+
+
+      <!-- ====================================================
+           Registered state
+           ==================================================== -->
+
+      <div
+        id="registered-panel"
+        class="registered-panel hidden"
+      >
+
+        <div class="registered-panel__info">
+
+          <span class="registered-panel__label">
+            Registered as
+          </span>
+
+          <strong
+            id="registered-agent-id"
+            class="registered-panel__agent"
+          >
+            —
+          </strong>
+
+        </div>
+
+
+        <button
+          id="unregister-button"
+          class="button button--danger"
+          type="button"
+        >
+          Unregister
+        </button>
+
+      </div>
+
+    </section>
+
+
+    <!-- ======================================================
+         Agents
+         ====================================================== -->
+
+    <section class="card">
+
+      <div class="card__header">
+
+        <div>
+          <h2 class="card__title">
+            Agents
+          </h2>
+
+          <p class="card__description">
+            Browser chats currently exposed to 9Router.
+          </p>
+        </div>
+
+
+        <button
+          id="refresh-button"
+          class="icon-button"
+          type="button"
+          title="Refresh"
+          aria-label="Refresh agents"
+        >
+          ↻
+        </button>
+
+      </div>
+
+
+      <!-- ====================================================
+           Empty state
+           ==================================================== -->
+
+      <div
+        id="agents-empty"
+        class="empty-state"
+      >
+        No agents registered.
+      </div>
+
+
+      <!-- ====================================================
+           Agent list
+           ==================================================== -->
+
+      <div
+        id="agents-list"
+        class="agents-list hidden"
+      >
+      </div>
+
+    </section>
+
+
+    <!-- ======================================================
+         Connection
+         ====================================================== -->
+
+    <section class="card card--compact">
+
+      <div class="connection">
+
+        <div>
+
+          <span class="connection__label">
+            9Router
+          </span>
+
+          <span
+            id="ws-url"
+            class="connection__url"
+            title=""
+          >
+            ws://127.0.0.1:20128/browser-bridge
+          </span>
+
+        </div>
+
+
+        <span
+          id="connection-state"
+          class="connection__state"
+        >
+          Disconnected
+        </span>
+
+      </div>
+
+    </section>
+
+
+    <!-- ======================================================
+         Error
+         ====================================================== -->
+
+    <div
+      id="error-message"
+      class="notice notice--error hidden"
+      role="alert"
+    >
+    </div>
+
+
+    <!-- ======================================================
+         Footer
+         ====================================================== -->
+
+    <footer class="footer">
+
+      <span>
+        Browser Chat Bridge
+      </span>
+
+      <span>
+        v0.1.0
+      </span>
+
+    </footer>
+
+  </main>
+
+
+  <script
+    type="module"
+    src="./popup.js"
+  ></script>
+
+</body>
+</html>

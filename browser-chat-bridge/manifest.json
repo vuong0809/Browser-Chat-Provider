@@ -1,0 +1,44 @@
+{
+    "manifest_version": 3,
+    "name": "Browser Chat Provider Bridge",
+    "version": "0.1.0",
+    "description": "Bridge between 9Router and browser-based AI chat sessions.",
+    "permissions": [
+        "tabs",
+        "storage",
+        "activeTab",
+        "debugger"
+    ],
+    "host_permissions": [
+        "https://chatgpt.com/*"
+    ],
+    "background": {
+        "service_worker": "src/background/service-worker.js",
+        "type": "module"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "https://chatgpt.com/*"
+            ],
+            "js": [
+                "dist/network-interceptor.js"
+            ],
+            "run_at": "document_start",
+            "world": "MAIN"
+        },
+        {
+            "matches": [
+                "https://chatgpt.com/*"
+            ],
+            "js": [
+                "dist/content-script.js"
+            ],
+            "run_at": "document_idle"
+        }
+    ],
+    "action": {
+        "default_title": "9Router Browser Chat Bridge",
+        "default_popup": "src/popup/popup.html"
+    }
+}

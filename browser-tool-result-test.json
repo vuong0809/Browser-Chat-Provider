@@ -1,0 +1,51 @@
+{
+  "model": "architect",
+  "stream": false,
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hãy sử dụng tool run_command để kiểm tra thư mục hiện tại. Không tự trả lời kết quả."
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_mu6ej6d1_thiq7cx9wlp",
+          "type": "function",
+          "function": {
+            "name": "run_command",
+            "arguments": "{\"command\":\"pwd && ls -la\"}"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_mu6ej6d1_thiq7cx9wlp",
+      "content": "C:\\Users\\tuanv\\Documents\\workspaces\\9router\nbrowser-chat\npackage.json\nREADME.md"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "run_command",
+        "description": "Run a command in the local project workspace",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Command to execute"
+            }
+          },
+          "required": [
+            "command"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}
