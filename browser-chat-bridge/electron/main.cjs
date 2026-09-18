@@ -352,6 +352,27 @@ async function sendPromptToChatGPT({
   content,
   options = {}
 }) {
+
+console.log(
+  "[Electron][ChatGPT] sendPromptToChatGPT started",
+  {
+    contentLength:
+      typeof content === "string"
+        ? content.length
+        : 0,
+    timeoutMs:
+      options.timeout ||
+      options.timeoutMs ||
+      180_000,
+    url:
+      mainWindow &&
+      !mainWindow.isDestroyed()
+        ? mainWindow.webContents.getURL()
+        : null,
+    timestamp:
+      new Date().toISOString()
+  }
+);
   if (
     !mainWindow ||
     mainWindow.isDestroyed()

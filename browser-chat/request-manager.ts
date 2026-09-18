@@ -339,7 +339,22 @@ export class RequestManager {
          * Never clear the lock when the referenced request is still
          * active in this.requests.
          */
-
+        logger.info(
+            "Agent lock state before acquire",
+            {
+                agentId: normalizedAgentId,
+                agentStatus: agent.status,
+                activeRequestId: agent.activeRequestId,
+                activeRequestExists:
+                    agent.activeRequestId
+                        ? this.requests.has(
+                            agent.activeRequestId
+                        )
+                        : false,
+                runtimeRequestCount:
+                    this.requests.size
+            }
+        );
         if (agent.activeRequestId) {
 
             const activeRuntime =
