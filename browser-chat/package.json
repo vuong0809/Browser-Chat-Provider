@@ -1,7 +1,20 @@
 {
+  "name": "browser-chat-provider",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Browser Chat Provider WebSocket server.",
+  "bin": {
+    "browser-chat": "bin/browser-chat-provider.cjs",
+    "browser-chat-provider": "bin/browser-chat-provider.cjs"
+  },
+  "scripts": {
+    "dev": "nodemon --watch bin --watch dist --watch package.json --ext cjs,js,json --exec node bin/browser-chat-provider.cjs",
+    "start": "node bin/browser-chat-provider.cjs"
+  },
   "devDependencies": {
     "@types/node": "^22.20.3",
     "@types/ws": "^8.18.1",
+    "nodemon": "^3.1.14",
     "typescript": "^7.0.2"
   },
   "dependencies": {
