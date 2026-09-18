@@ -87,15 +87,294 @@ function getBridgeId() {
 
   return process.env.BROWSER_CHAT_BRIDGE_ID || undefined;
 }
-
-async function sendPromptToChatGPT({ content, options = {} }) {
+async function insertPromptWithCDP(text) {
   if (!mainWindow || mainWindow.isDestroyed()) {
     throw new Error("ChatGPT window is not available");
   }
 
-  const timeoutMs = Number(options.timeout || options.timeoutMs || 180_000);
+  if (typeof text !== "string" || !text.trim()) {
+    throw new Error("Prompt text is required");
+  }
 
-  return mainWindow.webContents.executeJavaScript(`
+  const debuggerClient =
+    mainWindow.webContents.debugger;
+
+  let attachedHere = false;
+
+  try {
+    if (!debuggerClient.isAttached()) {
+      debuggerClient.attach("1.3");
+      attachedHere = true;
+    }
+
+    // --------------------------------------------------------
+    // Find + focus ChatGPT composer
+    // --------------------------------------------------------
+
+    const focusResult =
+      await debuggerClient.sendCommand(
+        "Runtime.evaluate",
+        {
+          expression: `
+            (() => {
+              const composer =
+                document.querySelector(
+                  'div.ProseMirror[contenteditable="true"]'
+                ) ||
+                document.querySelector(
+                  '[contenteditable="true"][role="textbox"]'
+                );
+
+              if (!composer) {
+                return {
+                  composerFound: false
+                };
+              }
+
+              composer.focus();
+
+              const selection =
+                window.getSelection();
+
+              const range =
+                document.createRange();
+
+              range.selectNodeContents(
+                composer
+              );
+
+              selection.removeAllRanges();
+              selection.addRange(range);
+
+              return {
+                composerFound: true,
+                existingLength:
+                  (
+                    composer.innerText ||
+                    composer.textContent ||
+                    ""
+                  ).length
+              };
+            })()
+          `,
+          returnByValue: true
+        }
+      );
+
+    const focusValue =
+      focusResult?.result?.value || {};
+
+    if (!focusValue.composerFound) {
+      throw new Error(
+        "ChatGPT composer not found"
+      );
+    }
+
+    // --------------------------------------------------------
+    // Clear existing composer through native keyboard input
+    // --------------------------------------------------------
+
+    await debuggerClient.sendCommand(
+      "Input.dispatchKeyEvent",
+      {
+        type: "keyDown",
+        key: "Control",
+        code: "ControlLeft",
+        windowsVirtualKeyCode: 17,
+        modifiers: 2
+      }
+    );
+
+    await debuggerClient.sendCommand(
+      "Input.dispatchKeyEvent",
+      {
+        type: "keyDown",
+        key: "a",
+        code: "KeyA",
+        windowsVirtualKeyCode: 65,
+        modifiers: 2
+      }
+    );
+
+    await debuggerClient.sendCommand(
+      "Input.dispatchKeyEvent",
+      {
+        type: "keyUp",
+        key: "a",
+        code: "KeyA",
+        windowsVirtualKeyCode: 65,
+        modifiers: 2
+      }
+    );
+
+    await debuggerClient.sendCommand(
+      "Input.dispatchKeyEvent",
+      {
+        type: "keyUp",
+        key: "Control",
+        code: "ControlLeft",
+        windowsVirtualKeyCode: 17
+      }
+    );
+
+    await debuggerClient.sendCommand(
+      "Input.dispatchKeyEvent",
+      {
+        type: "keyDown",
+        key: "Backspace",
+        code: "Backspace",
+        windowsVirtualKeyCode: 8
+      }
+    );
+
+    await debuggerClient.sendCommand(
+      "Input.dispatchKeyEvent",
+      {
+        type: "keyUp",
+        key: "Backspace",
+        code: "Backspace",
+        windowsVirtualKeyCode: 8
+      }
+    );
+
+    // --------------------------------------------------------
+    // Browser-native text insertion
+    // --------------------------------------------------------
+
+    await debuggerClient.sendCommand(
+      "Input.insertText",
+      {
+        text
+      }
+    );
+
+    // Give ProseMirror/React a render cycle.
+    await new Promise(
+      resolve =>
+        setTimeout(resolve, 150)
+    );
+
+    // --------------------------------------------------------
+    // Verify input only.
+    //
+    // IMPORTANT:
+    // Do NOT require the Send button here.
+    // --------------------------------------------------------
+
+    const verifyResult =
+      await debuggerClient.sendCommand(
+        "Runtime.evaluate",
+        {
+          expression: `
+            (() => {
+              const composer =
+                document.querySelector(
+                  'div.ProseMirror[contenteditable="true"]'
+                ) ||
+                document.querySelector(
+                  '[contenteditable="true"][role="textbox"]'
+                );
+
+              if (!composer) {
+                return {
+                  composerFound: false,
+                  text: ""
+                };
+              }
+
+              return {
+                composerFound: true,
+
+                text:
+                  (
+                    composer.innerText ||
+                    composer.textContent ||
+                    ""
+                  ).trim()
+              };
+            })()
+          `,
+          returnByValue: true
+        }
+      );
+
+    const result =
+      verifyResult?.result?.value || {};
+
+    console.log(
+      "[Electron][CDP] Input completed",
+      {
+        composerFound:
+          result.composerFound,
+
+        expectedLength:
+          text.length,
+
+        actualLength:
+          typeof result.text === "string"
+            ? result.text.length
+            : 0,
+
+        previousLength:
+          focusValue.existingLength || 0
+      }
+    );
+
+    if (!result.composerFound) {
+      throw new Error(
+        "ChatGPT composer disappeared after CDP input"
+      );
+    }
+
+    if (!result.text) {
+      throw new Error(
+        "ChatGPT composer is empty after CDP input"
+      );
+    }
+
+    return {
+      composerFound: true,
+      textLength: result.text.length,
+      expectedLength: text.length
+    };
+
+  } finally {
+
+    if (
+      attachedHere &&
+      debuggerClient.isAttached()
+    ) {
+      debuggerClient.detach();
+    }
+  }
+}
+async function sendPromptToChatGPT({
+  content,
+  options = {}
+}) {
+  if (
+    !mainWindow ||
+    mainWindow.isDestroyed()
+  ) {
+    throw new Error(
+      "ChatGPT window is not available"
+    );
+  }
+
+  const timeoutMs =
+    Number(
+      options.timeout ||
+      options.timeoutMs ||
+      180_000
+    );
+
+  // Browser-native ProseMirror input.
+  await insertPromptWithCDP(
+    content
+  );
+
+  return mainWindow.webContents
+    .executeJavaScript(`
     (async () => {
       const prompt = ${JSON.stringify(content)};
       const timeoutMs = ${JSON.stringify(timeoutMs)};
@@ -130,22 +409,7 @@ async function sendPromptToChatGPT({ content, options = {} }) {
           buttons.find((button) => button.querySelector('svg') && !button.disabled);
       }
 
-      function setComposerText(composer, text) {
-        composer.focus();
 
-        if ('value' in composer) {
-          const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value') ||
-            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
-
-          if (descriptor?.set) {
-            descriptor.set.call(composer, text);
-          } else {
-            composer.value = text;
-          }
-
-          composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
-          return;
-        }
 
         const selection = window.getSelection();
         const range = document.createRange();
@@ -176,7 +440,10 @@ async function sendPromptToChatGPT({ content, options = {} }) {
       const beforeTexts = getAssistantTexts();
       const beforeLast = beforeTexts.at(-1) || '';
       const composer = await waitFor(findComposer, 'ChatGPT composer');
-      setComposerText(composer, prompt);
+      await waitFor(
+        findComposer,
+        'ChatGPT composer'
+      );
 
       const sendButton = await waitFor(() => {
         const button = findSendButton();
