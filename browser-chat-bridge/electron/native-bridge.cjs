@@ -68,7 +68,7 @@ function getWebSocketConstructor() {
 }
 
 class NativeBridge extends EventEmitter {
-  constructor({ wsUrl = DEFAULT_WS_URL, bridgeId = DEFAULT_BRIDGE_ID } = {}) {
+  constructor({ wsUrl = DEFAULT_WS_URL, bridgeId = DEFAULT_BRIDGE_ID, chatHandler = null } = {}) {
     super();
 
     this.wsUrl = wsUrl;
@@ -79,6 +79,7 @@ class NativeBridge extends EventEmitter {
     this.heartbeatTimer = null;
     this.heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
     this.agents = new Map();
+    this.chatHandler = chatHandler;
   }
 
   connect() {
@@ -216,7 +217,7 @@ class NativeBridge extends EventEmitter {
     }
   }
 
-  handleChatSend(message) {
+  async handleChatSend(message) {
     const agentId = message.payload?.agentId;
     const agent = this.agents.get(agentId);
 
@@ -229,15 +230,82 @@ class NativeBridge extends EventEmitter {
       return;
     }
 
-    this.send(createError(
-      message.id,
-      "NOT_IMPLEMENTED",
-      "Native Electron chat.send routing is not implemented in Phase 1",
-      {
+    if (typeof this.chatHandler !== "function") {
+      this.send(createError(
+        message.id,
+        "NOT_IMPLEMENTED",
+        "Native Electron chat.send handler is not configured"
+      ));
+      return;
+    }
+
+    const content = message.payload?.message?.content;
+
+    if (typeof content !== "string" || !content.trim()) {
+      this.send(createError(
+        message.id,
+        "INVALID_REQUEST",
+        "chat.send payload.message.content is required"
+      ));
+      return;
+    }
+
+    const startedAt = Date.now();
+
+    try {
+      agent.status = "sending";
+      this.send(createEvent("agent.status", {
+        bridgeId: this.bridgeId,
         agentId,
-        nextPhase: "Inject ChatGPT adapter through preload/executeJavaScript and route chat.send via Electron IPC"
-      }
-    ));
+        status: "sending",
+        requestId: message.id
+      }));
+
+      const result = await this.chatHandler({
+        agentId,
+        requestId: message.id,
+        content,
+        options: message.payload?.options || {}
+      });
+
+      agent.status = "idle";
+
+      this.send({
+        ...createEnvelope("response"),
+        id: message.id,
+        result: {
+          agentId,
+          status: "completed",
+          content: result.content || "",
+          conversationId: result.conversationId || null,
+          title: result.title || agent.title || null,
+          durationMs: Date.now() - startedAt
+        }
+      });
+
+      this.send(createEvent("agent.status", {
+        bridgeId: this.bridgeId,
+        agentId,
+        status: "idle"
+      }));
+    } catch (error) {
+      agent.status = "idle";
+
+      this.send(createError(
+        message.id,
+        "CHAT_SEND_FAILED",
+        error instanceof Error ? error.message : String(error),
+        {
+          agentId
+        }
+      ));
+
+      this.send(createEvent("agent.status", {
+        bridgeId: this.bridgeId,
+        agentId,
+        status: "idle"
+      }));
+    }
   }
 
   announceAllAgents() {

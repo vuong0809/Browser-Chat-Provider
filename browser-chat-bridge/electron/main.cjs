@@ -88,6 +88,142 @@ function getBridgeId() {
   return process.env.BROWSER_CHAT_BRIDGE_ID || undefined;
 }
 
+async function sendPromptToChatGPT({ content, options = {} }) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    throw new Error("ChatGPT window is not available");
+  }
+
+  const timeoutMs = Number(options.timeout || options.timeoutMs || 180_000);
+
+  return mainWindow.webContents.executeJavaScript(`
+    (async () => {
+      const prompt = ${JSON.stringify(content)};
+      const timeoutMs = ${JSON.stringify(timeoutMs)};
+      const startedAt = Date.now();
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+      function getText(element) {
+        return (element?.innerText || element?.textContent || "").trim();
+      }
+
+      function getAssistantTexts() {
+        const selectors = [
+          '[data-message-author-role="assistant"]',
+          '[data-testid^="conversation-turn-"] [data-message-author-role="assistant"]'
+        ];
+
+        const nodes = Array.from(document.querySelectorAll(selectors.join(',')));
+        return nodes.map(getText).filter(Boolean);
+      }
+
+      function findComposer() {
+        return document.querySelector('div.ProseMirror[contenteditable="true"]') ||
+          document.querySelector('[contenteditable="true"][role="textbox"]') ||
+          document.querySelector('textarea') ||
+          document.querySelector('[contenteditable="true"]');
+      }
+
+      function findSendButton() {
+        const buttons = Array.from(document.querySelectorAll('button'));
+        return document.querySelector('[data-testid="send-button"]') ||
+          buttons.find((button) => /send|submit/i.test(button.getAttribute('aria-label') || button.textContent || '')) ||
+          buttons.find((button) => button.querySelector('svg') && !button.disabled);
+      }
+
+      function setComposerText(composer, text) {
+        composer.focus();
+
+        if ('value' in composer) {
+          const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value') ||
+            Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+
+          if (descriptor?.set) {
+            descriptor.set.call(composer, text);
+          } else {
+            composer.value = text;
+          }
+
+          composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+          return;
+        }
+
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(composer);
+        selection.removeAllRanges();
+        selection.addRange(range);
+
+        try {
+          document.execCommand('delete', false);
+          document.execCommand('insertText', false, text);
+        } catch {
+          composer.textContent = text;
+        }
+
+        composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+      }
+
+      async function waitFor(condition, label) {
+        while (Date.now() - startedAt < timeoutMs) {
+          const value = condition();
+          if (value) return value;
+          await sleep(250);
+        }
+
+        throw new Error('Timed out waiting for ' + label);
+      }
+
+      const beforeTexts = getAssistantTexts();
+      const beforeLast = beforeTexts.at(-1) || '';
+      const composer = await waitFor(findComposer, 'ChatGPT composer');
+      setComposerText(composer, prompt);
+
+      const sendButton = await waitFor(() => {
+        const button = findSendButton();
+        if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') return null;
+        return button;
+      }, 'enabled send button');
+
+      sendButton.click();
+
+      let lastText = '';
+      let stableCount = 0;
+
+      while (Date.now() - startedAt < timeoutMs) {
+        await sleep(1000);
+
+        const texts = getAssistantTexts();
+        const current = texts.at(-1) || '';
+        const changed = current && current !== beforeLast;
+
+        if (!changed) {
+          continue;
+        }
+
+        if (current === lastText) {
+          stableCount += 1;
+        } else {
+          stableCount = 0;
+          lastText = current;
+        }
+
+        const stopButton = Array.from(document.querySelectorAll('button'))
+          .find((button) => /stop/i.test(button.getAttribute('aria-label') || button.textContent || ''));
+
+        if (stableCount >= 2 && !stopButton) {
+          return {
+            content: current,
+            title: document.title || null,
+            conversationId: location.pathname.match(/\/c\/([^/?#]+)/)?.[1] || null
+          };
+        }
+      }
+
+      throw new Error('Timed out waiting for ChatGPT response');
+    })()
+  `, true);
+}
+
 function writeRuntimeConfig() {
   const wsUrl = getWebSocketUrl();
   const config = {};
@@ -218,7 +354,8 @@ async function main() {
 
   nativeBridge = new NativeBridge({
     wsUrl: getWebSocketUrl(),
-    bridgeId: getBridgeId()
+    bridgeId: getBridgeId(),
+    chatHandler: sendPromptToChatGPT
   });
 
   nativeBridge.on("status", status => {
