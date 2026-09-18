@@ -202,7 +202,7 @@ async function initialize() {
 
 
             // ------------------------------------------------------
-            // Connect to 9Router
+            // Connect to Browser Chat Provider
             // ------------------------------------------------------
 
             websocket.connect();
@@ -288,7 +288,7 @@ function handleWebSocketClose() {
 
 
     console.log(
-        "[ServiceWorker] 9Router disconnected"
+        "[ServiceWorker] Browser Chat Provider disconnected"
     );
 }
 
@@ -377,7 +377,7 @@ async function handleWebSocketMessage(
              *
              * Important after:
              * - WebSocket reconnect
-             * - 9Router restart
+             * - Browser Chat Provider restart
              * - service worker restart
              */
             await announceAllAgents();
@@ -1247,7 +1247,7 @@ async function handleRegisterAgent(
 
 
     // ----------------------------------------------------------
-    // Notify 9Router
+    // Notify Browser Chat Provider
     // ----------------------------------------------------------
 
     if (

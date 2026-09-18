@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "Browser Chat Provider Bridge",
     "version": "0.1.0",
-    "description": "Bridge between 9Router and browser-based AI chat sessions.",
+    "description": "Bridge between Browser Chat Provider and browser-based AI chat sessions.",
     "permissions": [
         "tabs",
         "storage",
@@ -38,7 +38,7 @@
         }
     ],
     "action": {
-        "default_title": "9Router Browser Chat Bridge",
+        "default_title": "Browser Chat Provider Bridge",
         "default_popup": "src/popup/popup.html"
     }
 }

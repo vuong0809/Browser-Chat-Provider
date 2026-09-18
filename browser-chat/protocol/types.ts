@@ -622,7 +622,7 @@ export type ChatErrorEvent =
 /*
  * These types are NOT sent over the wire.
  *
- * They are runtime records used by the 9Router browser-chat
+ * They are runtime records used by the Browser Chat Provider
  * module.
  */
 

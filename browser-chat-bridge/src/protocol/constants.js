@@ -1,7 +1,7 @@
 // src/protocol/constants.js
 
 /**
- * 9Router Browser Chat Bridge
+ * Browser Chat Provider Bridge
  * Protocol constants
  */
 
@@ -13,7 +13,7 @@ export const PROTOCOL_VERSION = 1;
 
 
 // ============================================================
-// 9Router WebSocket
+// Browser Chat Provider WebSocket
 // ============================================================
 
 export const DEFAULT_WS_URL =

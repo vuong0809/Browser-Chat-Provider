@@ -336,7 +336,7 @@ export class RequestRouter {
 
 
       // ------------------------------------------------------
-      // Notify 9Router about state
+      // Notify Browser Chat Provider about state
       // ------------------------------------------------------
 
       this._send(
@@ -533,7 +533,7 @@ export class RequestRouter {
 
     /*
      * Avoid exposing unnecessary internal information
-     * to Codex/9Router.
+     * to Codex/Browser Chat Provider.
      *
      * tabId is intentionally not included here.
      */
@@ -579,20 +579,20 @@ export class RequestRouter {
 
 
   // ==========================================================
-  // Responses from 9Router
+  // Responses from Browser Chat Provider
   // ==========================================================
 
   _handleResponse(message) {
 
     /*
-     * Most responses from 9Router will eventually be handled
+     * Most responses from Browser Chat Provider will eventually be handled
      * by a request manager.
      *
      * For the MVP we only log them.
      */
 
     console.log(
-      "[RequestRouter] Response from 9Router:",
+      "[RequestRouter] Response from Browser Chat Provider:",
       message.id,
       message.result
     );
@@ -600,13 +600,13 @@ export class RequestRouter {
 
 
   // ==========================================================
-  // Events from 9Router
+  // Events from Browser Chat Provider
   // ==========================================================
 
   async _handleEvent(message) {
 
     console.log(
-      "[RequestRouter] Event from 9Router:",
+      "[RequestRouter] Event from Browser Chat Provider:",
       message.method,
       message.payload
     );
@@ -630,7 +630,7 @@ export class RequestRouter {
   _handleRemoteError(message) {
 
     console.error(
-      "[RequestRouter] Error from 9Router:",
+      "[RequestRouter] Error from Browser Chat Provider:",
       message.error
     );
   }
@@ -721,7 +721,7 @@ export class RequestRouter {
     /*
      * We intentionally build the event here instead of
      * importing createChatDelta, so the routing layer remains
-     * explicit about what is sent to 9Router.
+     * explicit about what is sent to Browser Chat Provider.
      */
 
     this._send({

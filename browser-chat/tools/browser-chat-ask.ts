@@ -66,7 +66,7 @@ export interface BrowserChatAskInput {
         string;
 
     /*
-     * Keep streaming enabled between Extension and 9Router.
+     * Keep streaming enabled between Extension and Browser Chat Provider.
      *
      * The Codex tool itself still resolves when the browser
      * response is complete.
@@ -398,7 +398,7 @@ export async function browserChatAsk(
 /*
  * Generic tool schema.
  *
- * File 37 can adapt this definition to the actual 9Router
+ * File 37 can adapt this definition to the actual host
  * registration API.
  */
 
@@ -444,7 +444,7 @@ export const browserChatAskToolDefinition = {
                     "boolean",
 
                 description:
-                    "Enable streaming between the browser bridge and 9Router while waiting for completion.",
+                    "Enable streaming between the browser bridge and Browser Chat Provider while waiting for completion.",
 
                 default:
                     true

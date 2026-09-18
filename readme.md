@@ -30,7 +30,7 @@ browser-chat-bridge
 ## Cấu trúc dự án
 
 ```text
-9router/
+browser-chat-provider/
 ├── browser-chat/
 │   ├── agent-registry.ts
 │   ├── bridge-manager.ts
@@ -88,7 +88,7 @@ browser-chat-bridge
 - `standalone`: Browser Chat tự sở hữu TCP/WebSocket listener.
 - `attached`: ứng dụng host sở hữu HTTP server và chuyển HTTP upgrade request cho Browser Chat thông qua `handleUpgrade()`.
 
-Theo source hiện tại, chế độ `attached` được thiết kế để tích hợp với 9Router.
+Theo source hiện tại, chế độ `attached` được thiết kế để tích hợp với bất kỳ host application nào cần tự quản lý HTTP/WebSocket server.
 
 ### Tools
 
@@ -312,10 +312,10 @@ Extension đã có thư mục `dist/` chứa các artifact được build.
 
 `browser-chat` có thể được sử dụng như một module trong ứng dụng Node.js host hoặc chạy theo mô hình standalone tùy cấu hình WebSocket.
 
-Khi tích hợp vào 9Router, mô hình được thiết kế là:
+Khi tích hợp vào một host application, mô hình được thiết kế là:
 
 ```text
-9Router HTTP/WebSocket server
+Host HTTP/WebSocket server
           |
           +--> BrowserChatModule (attached)
                            |

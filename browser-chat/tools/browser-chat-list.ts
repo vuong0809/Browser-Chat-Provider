@@ -202,7 +202,7 @@ export class BrowserChatListTool {
 // ============================================================
 
 /*
- * Some 9Router tool registries may prefer a plain function
+ * Some host tool registries may prefer a plain function
  * instead of a class instance.
  */
 
@@ -230,7 +230,7 @@ export async function browserChatList(
 /*
  * Generic JSON-schema-like definition.
  *
- * File 37 (index.ts) can adapt this object to the exact 9Router
+ * File 37 (index.ts) can adapt this object to the exact host
  * tool registration API without coupling this module to Codex,
  * OpenAI, MCP, or another provider.
  */

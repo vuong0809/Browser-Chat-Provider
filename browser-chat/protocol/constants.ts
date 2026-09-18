@@ -489,7 +489,7 @@ export const WS_CLOSE_CODE = {
 // ============================================================
 
 /*
- * These are local 9Router events.
+ * These are local Browser Chat Provider events.
  *
  * They are NOT part of the Browser Chat wire protocol.
  */

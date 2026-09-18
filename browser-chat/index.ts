@@ -90,7 +90,7 @@ export interface BrowserChatModuleOptions {
      * and the host application forwards HTTP upgrade requests
      * through handleUpgrade().
      *
-     * 9Router integration should use "attached".
+     * Host integrations that already own an HTTP server should use "attached".
      */
 
     websocketMode?:
@@ -590,7 +590,7 @@ export class BrowserChatModule {
      * Returns true when this HTTP upgrade request belongs to
      * Browser Chat.
      *
-     * 9Router custom-server.js can use this before forwarding
+     * Host applications can use this before forwarding
      * the socket to handleUpgrade().
      */
 
@@ -612,7 +612,7 @@ export class BrowserChatModule {
      *
      * This is intended for:
      *
-     *   9Router HTTP server
+     *   Host HTTP server
      *       ↓
      *   /browser-bridge
      *       ↓
@@ -782,7 +782,7 @@ export class BrowserChatModule {
     // ========================================================
 
     /*
-     * This gives 9Router a simple integration point even if its
+     * This gives host applications a simple integration point even if their
      * existing tool registry has a different API.
      */
 
@@ -914,7 +914,7 @@ let defaultInstance:
 
 
 /*
- * Optional convenience helper for 9Router.
+ * Optional convenience helper for host integrations.
  *
  * Do not automatically start the module during import.
  */
