@@ -40,6 +40,18 @@ const ERROR_CODE = Object.freeze({
   INTERNAL_ERROR: "INTERNAL_ERROR"
 });
 
+function getErrorMessage(error) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  return String(error || "Unknown error");
+}
+
 
 // ============================================================
 // Request Router
@@ -49,7 +61,7 @@ export class RequestRouter {
 
   constructor({
     agentRegistry,
-    sendTo9Router
+    sendToProviderHost
   }) {
 
     if (!agentRegistry) {
@@ -58,17 +70,17 @@ export class RequestRouter {
       );
     }
 
-    if (typeof sendTo9Router !== "function") {
+    if (typeof sendToProviderHost !== "function") {
       throw new Error(
-        "RequestRouter requires sendTo9Router function"
+        "RequestRouter requires sendToProviderHost function"
       );
     }
 
     this.agentRegistry =
       agentRegistry;
 
-    this.sendTo9Router =
-      sendTo9Router;
+    this.sendToProviderHost =
+      sendToProviderHost;
   }
 
 
@@ -362,15 +374,33 @@ export class RequestRouter {
 
     } catch (error) {
 
+      const reason =
+        getErrorMessage(error);
+
       console.error(
         "[RequestRouter] Failed to send to content script:",
         error
       );
 
 
-      await this.agentRegistry.clearActiveRequest(
-        agentId,
-        message.id
+      try {
+        await this.agentRegistry.clearActiveRequest(
+          agentId,
+          message.id
+        );
+      } catch (clearError) {
+        console.warn(
+          "[RequestRouter] Failed to clear active request:",
+          clearError
+        );
+      }
+
+
+      this._send(
+        createAgentStatus(
+          agentId,
+          AGENT_STATUS.IDLE
+        )
       );
 
 
@@ -383,7 +413,7 @@ export class RequestRouter {
             agent.tabId,
 
           reason:
-            error.message
+            reason
         }
       );
     }
@@ -502,6 +532,9 @@ export class RequestRouter {
 
     } catch (error) {
 
+      const reason =
+        getErrorMessage(error);
+
       console.error(
         "[RequestRouter] Cancel failed:",
         error
@@ -514,7 +547,7 @@ export class RequestRouter {
         `Unable to cancel request: ${requestId}`,
         {
           reason:
-            error.message
+            reason
         }
       );
     }
@@ -953,14 +986,14 @@ export class RequestRouter {
 
     try {
 
-      this.sendTo9Router(
+      this.sendToProviderHost(
         message
       );
 
     } catch (error) {
 
       console.error(
-        "[RequestRouter] sendTo9Router failed:",
+        "[RequestRouter] sendToProviderHost failed:",
         error
       );
     }

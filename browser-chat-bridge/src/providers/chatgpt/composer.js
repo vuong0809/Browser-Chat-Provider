@@ -835,20 +835,73 @@ export async function sendComposerMessage(
   // This makes ChatGPT/ProseMirror update its real editor state.
   // ----------------------------------------------------------
 
-  const response =
-    await chrome.runtime.sendMessage({
-      type:
-        "browser-chat.cdp-input",
+  let response = null;
 
-      text
-    });
+
+  try {
+
+    response =
+      await chrome.runtime.sendMessage({
+        type:
+          "browser-chat.cdp-input",
+
+        text
+      });
+
+  } catch (error) {
+
+    console.warn(
+      "[ChatGPTComposer] CDP input unavailable; falling back to DOM input:",
+      error
+    );
+
+
+    await setComposerText(
+      text,
+      options
+    );
+
+
+    return submitComposer(
+      options
+    );
+  }
 
 
   if (!response?.ok) {
 
-    throw new Error(
+    const errorMessage =
       response?.error ||
-      "CDP composer input failed"
+      "CDP composer input failed";
+
+
+    if (
+      errorMessage.includes(
+        "chrome.debugger unavailable"
+      ) ||
+      errorMessage.includes(
+        "Cannot read properties of undefined (reading 'attach')"
+      )
+    ) {
+
+      console.warn(
+        "[ChatGPTComposer] CDP input unsupported; falling back to DOM input"
+      );
+
+
+      await setComposerText(
+        text,
+        options
+      );
+
+
+      return submitComposer(
+        options
+      );
+    }
+
+    throw new Error(
+      errorMessage
     );
   }
 

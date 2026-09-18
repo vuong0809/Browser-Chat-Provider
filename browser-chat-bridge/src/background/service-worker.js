@@ -60,6 +60,43 @@ let pendingBridgeRegisterId =
     null;
 
 
+async function loadElectronRuntimeConfig() {
+
+    try {
+
+        const response =
+            await fetch(
+                chrome.runtime.getURL(
+                    "electron/runtime-config.json"
+                ),
+                {
+                    cache:
+                        "no-store"
+                }
+            );
+
+        if (!response.ok) {
+            return {};
+        }
+
+        const config =
+            await response.json();
+
+        if (
+            !config ||
+            typeof config !== "object"
+        ) {
+            return {};
+        }
+
+        return config;
+
+    } catch {
+        return {};
+    }
+}
+
+
 // ============================================================
 // Core components
 // ============================================================
@@ -119,7 +156,7 @@ const requestRouter =
 
         agentRegistry,
 
-        sendTo9Router: (message) =>
+        sendToProviderHost: (message) =>
             websocket.send(message)
     });
 
@@ -158,7 +195,12 @@ async function initialize() {
                 ]);
 
 
+            const runtimeConfig =
+                await loadElectronRuntimeConfig();
+
+
             wsUrl =
+                runtimeConfig.wsUrl ||
                 stored[STORAGE_KEY.WS_URL] ||
                 DEFAULT_CONFIG.wsUrl;
 
@@ -429,6 +471,21 @@ async function handleWebSocketMessage(
 
     } catch (error) {
 
+        const messageText =
+            error instanceof Error
+                ? error.message
+                : String(error || "Unknown error");
+
+
+        if (messageText === "No SW") {
+
+            console.warn(
+                "[ServiceWorker] Content script/service worker channel unavailable. Reload the ChatGPT window and reopen the bridge popup."
+            );
+
+            return;
+        }
+
         console.error(
             "[ServiceWorker] Failed to process WebSocket message:",
             error
@@ -482,6 +539,15 @@ async function announceAllAgents() {
         }
 
 
+        const announcedAgent =
+            agent.status === AGENT_STATUS.OFFLINE
+                ? await agentRegistry.setStatus(
+                    agent.agentId,
+                    AGENT_STATUS.IDLE
+                )
+                : agent;
+
+
         /*
          * A tab existing does not necessarily mean the content
          * script is ready. We announce the stored state first;
@@ -492,25 +558,25 @@ async function announceAllAgents() {
             createAgentRegister({
                 bridgeId,
                 agentId:
-                    agent.agentId,
+                    announcedAgent.agentId,
 
                 provider:
-                    agent.provider,
+                    announcedAgent.provider,
 
                 tabId:
-                    agent.tabId,
+                    announcedAgent.tabId,
 
                 conversationId:
-                    agent.conversationId,
+                    announcedAgent.conversationId,
 
                 title:
-                    agent.title,
+                    announcedAgent.title,
 
                 status:
-                    agent.status,
+                    announcedAgent.status,
 
                 capabilities:
-                    agent.capabilities
+                    announcedAgent.capabilities
             })
         );
     }
@@ -586,6 +652,15 @@ async function insertTextWithCDP(
     tabId,
     text
 ) {
+
+    if (
+        !chrome.debugger ||
+        typeof chrome.debugger.attach !== "function"
+    ) {
+        throw new Error(
+            "chrome.debugger unavailable"
+        );
+    }
 
     if (!Number.isInteger(tabId)) {
         throw new Error(
@@ -978,6 +1053,18 @@ async function handleRuntimeMessage(
             }
 
 
+            if (
+                !chrome.debugger ||
+                typeof chrome.debugger.attach !== "function"
+            ) {
+                return {
+                    ok: false,
+                    error:
+                        "chrome.debugger unavailable"
+                };
+            }
+
+
             const result =
                 await insertTextWithCDP(
                     tabId,
@@ -1096,6 +1183,18 @@ async function handleRuntimeMessage(
             const tabId =
                 message.tabId ??
                 sender.tab?.id;
+
+
+            if (
+                !chrome.debugger ||
+                typeof chrome.debugger.attach !== "function"
+            ) {
+                return {
+                    ok: false,
+                    error:
+                        "chrome.debugger unavailable"
+                };
+            }
 
 
             const result =

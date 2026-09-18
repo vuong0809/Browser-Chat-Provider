@@ -91,6 +91,42 @@ let agents =
 let busy =
     false;
 
+async function loadElectronRuntimeConfig() {
+
+    try {
+
+        const response =
+            await fetch(
+                chrome.runtime.getURL(
+                    "electron/runtime-config.json"
+                ),
+                {
+                    cache:
+                        "no-store"
+                }
+            );
+
+        if (!response.ok) {
+            return {};
+        }
+
+        const config =
+            await response.json();
+
+        if (
+            !config ||
+            typeof config !== "object"
+        ) {
+            return {};
+        }
+
+        return config;
+
+    } catch {
+        return {};
+    }
+}
+
 
 // ============================================================
 // Bootstrap
@@ -187,6 +223,9 @@ async function refreshAll() {
 
 async function loadBridgeStatus() {
 
+    const runtimeConfig =
+        await loadElectronRuntimeConfig();
+
     try {
 
         bridgeInfo =
@@ -203,6 +242,26 @@ async function loadBridgeStatus() {
             );
         }
 
+
+        if (
+            runtimeConfig.wsUrl &&
+            bridgeInfo.wsUrl !== runtimeConfig.wsUrl
+        ) {
+
+            bridgeInfo = {
+                ...bridgeInfo,
+
+                wsUrl:
+                    runtimeConfig.wsUrl
+            };
+
+
+            await chrome.storage.local.set({
+                [STORAGE_KEY.WS_URL]:
+                    runtimeConfig.wsUrl
+            });
+        }
+
     } catch (error) {
 
         console.debug(
@@ -210,12 +269,12 @@ async function loadBridgeStatus() {
             error
         );
 
-
         bridgeInfo = {
             status:
                 BRIDGE_STATUS.DISCONNECTED,
 
             wsUrl:
+                runtimeConfig.wsUrl ||
                 DEFAULT_WS_URL
         };
     }
@@ -238,6 +297,33 @@ async function loadActiveTab() {
     activeTab =
         tabs?.[0] ??
         null;
+
+
+    if (
+        activeTab?.id &&
+        isChatGPTUrl(
+            activeTab.url
+        )
+    ) {
+        return;
+    }
+
+
+    const chatTabs =
+        await chrome.tabs.query({
+            url: [
+                "https://chatgpt.com/*"
+            ]
+        });
+
+
+    activeTab =
+        chatTabs.find(
+            (tab) =>
+                tab.active
+        ) ||
+        chatTabs[0] ||
+        activeTab;
 }
 
 

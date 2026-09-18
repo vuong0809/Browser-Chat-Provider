@@ -23,7 +23,7 @@
     {
       "role": "tool",
       "tool_call_id": "call_mu6ej6d1_thiq7cx9wlp",
-      "content": "C:\\Users\\tuanv\\Documents\\workspaces\\9router\nbrowser-chat\npackage.json\nREADME.md"
+      "content": "C:\\Users\\tuanv\\Documents\\workspaces\\browser-chat-provider\nbrowser-chat\npackage.json\nREADME.md"
     }
   ],
   "tools": [
