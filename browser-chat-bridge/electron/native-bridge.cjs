@@ -220,7 +220,18 @@ class NativeBridge extends EventEmitter {
   async handleChatSend(message) {
     const agentId = message.payload?.agentId;
     const agent = this.agents.get(agentId);
-
+    console.log(
+      "[Electron][NativeBridge] chat.send received",
+      {
+        requestId: message.id,
+        agentId: message.params?.agentId,
+        contentLength:
+          typeof message.params?.content === "string"
+            ? message.params.content.length
+            : 0,
+        timestamp: new Date().toISOString()
+      }
+    );
     if (!agent) {
       this.send(createError(
         message.id,
@@ -260,7 +271,13 @@ class NativeBridge extends EventEmitter {
         status: "sending",
         requestId: message.id
       }));
-
+      console.log(
+        "[Electron][NativeBridge] Calling chatHandler",
+        {
+          requestId,
+          agentId
+        }
+      );
       const result = await this.chatHandler({
         agentId,
         requestId: message.id,
