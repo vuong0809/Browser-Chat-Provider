@@ -643,7 +643,6 @@ function buildToolInstruction(
     return "";
   }
 
-
   return `
 You have access to external tools.
 
@@ -663,32 +662,27 @@ If a tool is required, respond ONLY with exactly this structure:
 <BROWSER_CHAT_TOOL_CALL>
 {
   "name": "tool_name",
-  "arguments": {
-  }
+  "arguments": {}
 }
 </BROWSER_CHAT_TOOL_CALL>
 
 Tool-call rules:
 
 - Use only a tool listed above.
-- "arguments" must be a strict valid JSON object.
-- The entire content between <BROWSER_CHAT_TOOL_CALL> and </BROWSER_CHAT_TOOL_CALL> must be strict valid JSON.
-- All JSON strings must use valid JSON escaping.
-- For Windows paths, ALWAYS prefer forward slashes, for example:
-  - Never output an unescaped Windows path such as C:\\Users\\name\\project\\file.txt inside JSON.
-- If a Windows path uses backslashes, every backslash MUST be escaped as a JSON backslash.
-- Never output an unescaped Windows path such as C:\Users\name\project\file.txt inside JSON.
-- Before responding, verify that the tool-call content can be parsed by JSON.parse().
-- Do not use Markdown code fences around the tool call.
-- Do not add explanation before the tool call.
-- Do not add explanation after the tool call.
+- Output strict valid JSON parseable by JSON.parse().
+- "arguments" must be a valid JSON object.
+- Escape ALL characters required by JSON, including double quotes inside string values.
+- NEVER use raw backslashes inside JSON strings.
+- Use forward slashes for ALL paths, including relative paths.
+- Valid path examples: openai/adapter.ts and C:/Users/name/project/file.txt
+- Prefer commands that avoid nested quotes when an equivalent command exists.
+- Do not use Markdown code fences or text outside the tool-call tags.
 - Request exactly ONE tool per response.
-- Do not claim that you executed the tool yourself.
-- If no tool is required, answer the user normally.
+- After a tool result, continue with another tool call if more work is needed.
+- If no tool is required, answer normally.
+- Before responding, verify that JSON.parse() can parse the exact content between the tool-call tags.
 `.trim();
 }
-
-
 /**
  * Parse the Browser Chat structured marker.
  */

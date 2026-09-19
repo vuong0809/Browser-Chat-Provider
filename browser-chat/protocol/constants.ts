@@ -239,7 +239,7 @@ export const DEFAULT_BRIDGE_CAPABILITIES = [
  */
 
 export const DEFAULT_REQUEST_TIMEOUT_MS =
-    180_000;
+    600_000;
 
 
 /*
@@ -257,7 +257,7 @@ export const MIN_REQUEST_TIMEOUT_MS =
  */
 
 export const MAX_REQUEST_TIMEOUT_MS =
-    600_000;
+    900_000;
 
 
 // ============================================================
