@@ -251,6 +251,7 @@ function chatGPTResponseScript(timeoutMs) {
             "[Electron][ChatGPT] Send clicked"
         );
 
+        let completionCandidateAt = null;
         let lastText = "";
         let stableCount = 0;
         let generationLogged = false;
@@ -444,6 +445,39 @@ function chatGPTResponseScript(timeoutMs) {
                 stableCount >= 2 &&
                 !stopButton
             ) {
+                // Stop button may disappear before React has
+                // finished rendering the complete assistant message.
+                //
+                // Start a settle period instead of returning
+                // immediately.
+                if (!completionCandidateAt) {
+                    completionCandidateAt =
+                        Date.now();
+
+                    console.log(
+                        "[Electron][ChatGPT] Completion candidate",
+                        {
+                            turnId:
+                                currentTurnId,
+
+                            contentLength:
+                                currentTurnText.length,
+
+                            stableCount
+                        }
+                    );
+
+                    continue;
+                }
+
+                const settleMs =
+                    Date.now() -
+                    completionCandidateAt;
+
+                if (settleMs < 2000) {
+                    continue;
+                }
+
                 const conversationId =
                     location.pathname
                         .match(
@@ -456,12 +490,18 @@ function chatGPTResponseScript(timeoutMs) {
                     {
                         turnId:
                             currentTurnId,
+
                         contentLength:
                             currentTurnText.length,
+
                         stableCount,
+
+                        settleMs,
+
                         durationMs:
                             Date.now() -
                             startedAt,
+
                         conversationId
                     }
                 );

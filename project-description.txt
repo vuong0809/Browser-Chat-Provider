@@ -1,0 +1,11 @@
+﻿Browser Chat Provider
+
+Dự án là một bridge/router kết nối các agent hoặc ứng dụng bên ngoài với ChatGPT Web thông qua trình duyệt.
+
+Kiến trúc gồm hai phần chính:
+- browser-chat: server/library TypeScript quản lý agent, request, queue và WebSocket.
+- browser-chat-bridge: browser extension kết nối WebSocket với ChatGPT Web.
+
+Luồng hoạt động: Agent/Client → WebSocket → browser-chat → browser-chat-bridge → ChatGPT Web.
+
+Protocol hỗ trợ đăng ký bridge/agent, gửi chat, nhận response, heartbeat, hủy request và xử lý lỗi.

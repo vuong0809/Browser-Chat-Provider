@@ -367,7 +367,7 @@ async function sendPromptToChatGPT({
       timeoutMs:
         options.timeout ||
         options.timeoutMs ||
-        180_000,
+        600_000,
       url:
         mainWindow &&
           !mainWindow.isDestroyed()
@@ -390,7 +390,7 @@ async function sendPromptToChatGPT({
     Number(
       options.timeout ||
       options.timeoutMs ||
-      180_000
+      600_000
     );
 
   // Browser-native ProseMirror input.
@@ -428,6 +428,12 @@ async function sendPromptToChatGPT({
           typeof result?.content === "string"
             ? result.content.length
             : 0,
+
+        contentPreview:
+          typeof result?.content === "string"
+            ? result.content.slice(0, 500)
+            : null,
+
         conversationId:
           result?.conversationId || null
       }
