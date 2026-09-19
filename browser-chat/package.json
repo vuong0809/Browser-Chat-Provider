@@ -8,12 +8,15 @@
     "browser-chat-provider": "bin/browser-chat-provider.cjs"
   },
   "scripts": {
+    "typecheck": "tsc",
+    "build": "esbuild index.ts --bundle --platform=node --format=cjs --target=node18 --external:ws --outfile=dist/browser-chat.cjs",
     "dev": "nodemon --watch bin --watch dist --watch package.json --ext cjs,js,json --exec node bin/browser-chat-provider.cjs",
     "start": "node bin/browser-chat-provider.cjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.3",
     "@types/ws": "^8.18.1",
+    "esbuild": "^0.28.2",
     "nodemon": "^3.1.14",
     "typescript": "^7.0.2"
   },

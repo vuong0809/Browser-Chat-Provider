@@ -671,7 +671,14 @@ If a tool is required, respond ONLY with exactly this structure:
 Tool-call rules:
 
 - Use only a tool listed above.
-- "arguments" must be a valid JSON object.
+- "arguments" must be a strict valid JSON object.
+- The entire content between <BROWSER_CHAT_TOOL_CALL> and </BROWSER_CHAT_TOOL_CALL> must be strict valid JSON.
+- All JSON strings must use valid JSON escaping.
+- For Windows paths, ALWAYS prefer forward slashes, for example:
+  - Never output an unescaped Windows path such as C:\\Users\\name\\project\\file.txt inside JSON.
+- If a Windows path uses backslashes, every backslash MUST be escaped as a JSON backslash.
+- Never output an unescaped Windows path such as C:\Users\name\project\file.txt inside JSON.
+- Before responding, verify that the tool-call content can be parsed by JSON.parse().
 - Do not use Markdown code fences around the tool call.
 - Do not add explanation before the tool call.
 - Do not add explanation after the tool call.
