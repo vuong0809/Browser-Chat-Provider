@@ -447,6 +447,25 @@ async function sendPromptToChatGPT({
           .map(getText)
           .filter(Boolean);
       }
+      function getLastConversationTurn() {
+        const turns =
+          Array.from(
+            document.querySelectorAll(
+              '[data-testid^="conversation-turn-"]'
+            )
+          );
+
+        const element =
+          turns.at(-1) || null;
+
+        return {
+          element,
+          id:
+            element?.getAttribute(
+              "data-testid"
+            ) || null
+        };
+      }
       function getResponseDiagnostics() {
         const roleNodes =
           Array.from(
@@ -575,6 +594,12 @@ async function sendPromptToChatGPT({
       const beforeLast =
         beforeTexts.at(-1) || "";
 
+      const beforeTurn =
+        getLastConversationTurn();
+
+      const beforeTurnId =
+        beforeTurn.id;
+
       // Input was already performed by
       // insertPromptWithCDP(content).
       await waitFor(
@@ -585,6 +610,17 @@ async function sendPromptToChatGPT({
       // Wait until ChatGPT exposes its real Send button.
      console.log(
   "[Electron][ChatGPT] Waiting for enabled Send button"
+);
+
+console.log(
+  "[Electron][ChatGPT] Conversation snapshot " +
+  JSON.stringify({
+    beforeTurnId,
+    beforeAssistantCount:
+      beforeTexts.length,
+    beforeLastLength:
+      beforeLast.length
+  })
 );
 
 const sendButton =
@@ -647,11 +683,41 @@ while (
 
   const current =
     texts.at(-1) || "";
-const diagnostics =
+
+  const currentTurn =
+    getLastConversationTurn();
+
+  const currentTurnId =
+    currentTurn.id;
+
+  const hasNewTurn =
+    Boolean(
+      currentTurnId &&
+      currentTurnId !==
+        beforeTurnId
+    );
+
+  const currentTurnAssistant =
+    hasNewTurn
+      ? currentTurn.element?.querySelector(
+          '[data-message-author-role="assistant"]'
+        ) || null
+      : null;
+
+  const currentTurnText =
+    getText(
+      currentTurnAssistant
+    );
+
+  const diagnostics =
     getResponseDiagnostics();
 
   const diagnosticState = {
     ...diagnostics,
+
+    beforeTurnId,
+    currentTurnId,
+    hasNewTurn,
 
     assistantCount:
       texts.length,
@@ -659,14 +725,17 @@ const diagnostics =
     currentLength:
       current.length,
 
+    currentTurnTextLength:
+      currentTurnText.length,
+
     beforeLastLength:
       beforeLast.length,
 
-    currentChanged:
-      Boolean(
-        current &&
-        current !== beforeLast
-      ),
+newTurnHasResponse:
+  Boolean(
+    hasNewTurn &&
+    currentTurnText
+  ),
 
     stableCount
   };
@@ -747,8 +816,10 @@ if (
 }
 
   const changed =
-    current &&
-    current !== beforeLast;
+    Boolean(
+      hasNewTurn &&
+      currentTurnText
+    );
 
   if (
     changed &&
@@ -759,8 +830,10 @@ if (
     console.log(
       "[Electron][ChatGPT] Assistant response detected",
       {
+        turnId:
+          currentTurnId,
         contentLength:
-          current.length,
+          currentTurnText.length,
         assistantCount:
           texts.length
       }
@@ -772,12 +845,14 @@ if (
   }
 
   if (
-    current === lastText
+    currentTurnText ===
+    lastText
   ) {
     stableCount += 1;
   } else {
     stableCount = 0;
-    lastText = current;
+    lastText =
+      currentTurnText;
   }
 
   if (
@@ -787,15 +862,17 @@ if (
     const conversationId =
       location.pathname
         .match(
-          /\\/c\\/([^/?#]+)/
+          /\/c\/([^/?#]+)/
         )?.[1] ||
       null;
 
     console.log(
       "[Electron][ChatGPT] Response completed",
       {
+        turnId:
+          currentTurnId,
         contentLength:
-          current.length,
+          currentTurnText.length,
         stableCount,
         durationMs:
           Date.now() -
@@ -806,7 +883,7 @@ if (
 
     return {
       content:
-        current,
+        currentTurnText,
 
       title:
         document.title ||
