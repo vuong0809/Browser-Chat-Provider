@@ -447,7 +447,67 @@ async function sendPromptToChatGPT({
           .map(getText)
           .filter(Boolean);
       }
+      function getResponseDiagnostics() {
+        const roleNodes =
+          Array.from(
+            document.querySelectorAll(
+              '[data-message-author-role="assistant"]'
+            )
+          );
 
+        const turnNodes =
+          Array.from(
+            document.querySelectorAll(
+              '[data-testid^="conversation-turn-"]'
+            )
+          );
+
+        const nestedAssistantNodes =
+          Array.from(
+            document.querySelectorAll(
+              '[data-testid^="conversation-turn-"] [data-message-author-role="assistant"]'
+            )
+          );
+
+        const lastRoleNode =
+          roleNodes.at(-1) || null;
+
+        const lastTurn =
+          turnNodes.at(-1) || null;
+
+        const lastTurnAssistant =
+          lastTurn?.querySelector(
+            '[data-message-author-role="assistant"]'
+          ) || null;
+
+        return {
+          roleNodeCount:
+            roleNodes.length,
+
+          nestedAssistantCount:
+            nestedAssistantNodes.length,
+
+          turnCount:
+            turnNodes.length,
+
+          lastRoleTextLength:
+            getText(lastRoleNode).length,
+
+          lastTurnTextLength:
+            getText(lastTurn).length,
+
+          lastTurnAssistantTextLength:
+            getText(lastTurnAssistant).length,
+
+          lastTurnTestId:
+            lastTurn?.getAttribute(
+              "data-testid"
+            ) || null,
+
+          lastTurnHasAssistant:
+            Boolean(lastTurnAssistant)
+        };
+      }
       function findComposer() {
         return (
           document.querySelector(
@@ -574,6 +634,7 @@ console.log(
       let stableCount = 0;
       let generationLogged = false;
       let responseLogged = false;
+      let lastDiagnosticSignature = "";
 
 while (
   Date.now() - startedAt <
@@ -586,34 +647,104 @@ while (
 
   const current =
     texts.at(-1) || "";
+const diagnostics =
+    getResponseDiagnostics();
 
-  // Detect whether ChatGPT is still generating.
-  const stopButton =
-    Array.from(
-      document.querySelectorAll(
-        "button"
-      )
-    ).find(
-      button =>
-        /stop/i.test(
-          button.getAttribute(
-            "aria-label"
-          ) ||
-          button.textContent ||
-          ""
-        )
+  const diagnosticState = {
+    ...diagnostics,
+
+    assistantCount:
+      texts.length,
+
+    currentLength:
+      current.length,
+
+    beforeLastLength:
+      beforeLast.length,
+
+    currentChanged:
+      Boolean(
+        current &&
+        current !== beforeLast
+      ),
+
+    stableCount
+  };
+
+  const diagnosticSignature =
+    JSON.stringify(
+      diagnosticState
     );
 
   if (
-    stopButton &&
-    !generationLogged
+    diagnosticSignature !==
+    lastDiagnosticSignature
   ) {
-    generationLogged = true;
+    lastDiagnosticSignature =
+      diagnosticSignature;
 
-    console.log(
-      "[Electron][ChatGPT] Generation started"
-    );
+console.log(
+  "[Electron][ChatGPT] Response diagnostic " +
+  JSON.stringify(diagnosticState)
+);
   }
+  // Detect whether ChatGPT is still generating.
+const stopButton =
+  Array.from(
+    document.querySelectorAll(
+      "button"
+    )
+  ).find(
+    button =>
+      /stop/i.test(
+        button.getAttribute(
+          "aria-label"
+        ) ||
+        button.textContent ||
+        ""
+      )
+  );
+
+// Diagnostic: log only when Stop state changes.
+const stopState =
+  Boolean(stopButton);
+
+if (
+  stopState !==
+  window.__browserChatLastStopState
+) {
+  window.__browserChatLastStopState =
+    stopState;
+
+  console.log(
+    "[Electron][ChatGPT] Stop button state " +
+    JSON.stringify({
+      found: stopState,
+      ariaLabel:
+        stopButton?.getAttribute(
+          "aria-label"
+        ) || null,
+      text:
+        (
+          stopButton?.textContent ||
+          ""
+        )
+          .trim()
+          .slice(0, 100)
+    })
+  );
+}
+
+if (
+  stopButton &&
+  !generationLogged
+) {
+  generationLogged = true;
+
+  console.log(
+    "[Electron][ChatGPT] Generation started"
+  );
+}
 
   const changed =
     current &&
@@ -822,7 +953,20 @@ function createWindow() {
       webSecurity: true
     }
   });
-
+  mainWindow.webContents.on(
+    "console-message",
+    (_event, level, message) => {
+      if (
+        typeof message === "string" &&
+        message.includes("[Electron][ChatGPT]")
+      ) {
+        console.log(
+          "[Electron][Renderer]",
+          message
+        );
+      }
+    }
+  );
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://chatgpt.com/")) {
       return { action: "allow" };
