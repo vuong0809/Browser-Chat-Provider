@@ -382,6 +382,10 @@ export class BrowserChatModule {
                     this.bridgeManager,
 
 
+                requestQueue:
+                    this.requestQueue,
+
+
                 onStatusChange:
                     (
                         request
