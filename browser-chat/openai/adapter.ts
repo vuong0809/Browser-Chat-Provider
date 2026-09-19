@@ -642,7 +642,6 @@ function buildToolInstruction(
 
     return "";
   }
-
   return `
 You have access to external tools.
 
@@ -651,11 +650,7 @@ An external agent will execute a requested tool and return its result.
 
 Available tools:
 
-${JSON.stringify(
-    definitions,
-    null,
-    2
-  )}
+${JSON.stringify(definitions, null, 2)}
 
 If a tool is required, respond ONLY with exactly this structure:
 
@@ -671,16 +666,32 @@ Tool-call rules:
 - Use only a tool listed above.
 - Output strict valid JSON parseable by JSON.parse().
 - "arguments" must be a valid JSON object.
-- Escape ALL characters required by JSON, including double quotes inside string values.
-- NEVER use raw backslashes inside JSON strings.
-- Use forward slashes for ALL paths, including relative paths.
+- Escape ALL characters required by JSON.
+- Every double quote inside a JSON string value MUST be escaped as \\\".
+- NEVER use raw backslashes inside JSON string values except valid JSON escape sequences.
+- Use forward slashes for ALL file paths, including Windows paths.
 - Valid path examples: openai/adapter.ts and C:/Users/name/project/file.txt
-- Prefer commands that avoid nested quotes when an equivalent command exists.
+- Prefer commands that do not require nested quotes when an equivalent command exists.
+
+Example of a command containing quotes:
+
+<BROWSER_CHAT_TOOL_CALL>
+{
+  "name": "exec_command",
+  "arguments": {
+    "cmd": "git grep -n -e \\\"DEFAULT_TIMEOUT_MS\\\" -e \\\"180 seconds\\\" -- \\\"*.ts\\\"",
+    "workdir": "C:/Users/name/project"
+  }
+}
+</BROWSER_CHAT_TOOL_CALL>
+
+The example above is valid JSON because quotes inside the "cmd" string are escaped.
+
 - Do not use Markdown code fences or text outside the tool-call tags.
 - Request exactly ONE tool per response.
 - After a tool result, continue with another tool call if more work is needed.
 - If no tool is required, answer normally.
-- Before responding, verify that JSON.parse() can parse the exact content between the tool-call tags.
+- Before responding, mentally run JSON.parse() on the exact content between the tool-call tags. If it would fail, fix the JSON before responding.
 `.trim();
 }
 /**
